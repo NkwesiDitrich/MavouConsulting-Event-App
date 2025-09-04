@@ -166,7 +166,8 @@ use App\Http\Controllers\Web\ProfileController;
 Route::prefix('web-api')->group(function () {
     Route::get('/events', [EventController::class, 'browseEvents']);
     Route::get('/events/search', [EventController::class, 'searchEvents']);
-    Route::get('/events/{id}', [EventController::class, 'getEventDetails']);
+    Route::get('/events/{id}', [EventController::class, 'getEventDetails']); // FIXED: This route was missing
+    Route::get('/events/{id}/details', [EventController::class, 'getEventDetails']); // FIXED: Alternative route for event details
     Route::get('/events/featured', [EventController::class, 'getFeaturedEvents']);
     Route::get('/categories', [EventController::class, 'getCategories']);
 });
@@ -178,13 +179,16 @@ Route::middleware(['auth'])->prefix('web-api')->group(function () {
     Route::put('/member/interests', [MemberController::class, 'updateInterests']);
     Route::get('/member/recommended-events', [MemberController::class, 'getRecommendedEvents']);
     
-    // Event registration
+    // Event registration - FIXED: Added unregister route
     Route::post('/events/{id}/register', [EventController::class, 'registerForEvent']);
+    Route::delete('/events/{id}/register', [EventController::class, 'unregisterFromEvent']); // FIXED: Added unregister
+    Route::delete('/events/{id}/unregister', [EventController::class, 'unregisterFromEvent']); // FIXED: Alternative unregister route
     
     // Profile routes
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
     Route::get('/profile/events', [ProfileController::class, 'myEvents']);
+    Route::get('/profile/stats', [ProfileController::class, 'getStats']); // FIXED: Added stats route
     Route::delete('/profile', [ProfileController::class, 'destroy']);
 });

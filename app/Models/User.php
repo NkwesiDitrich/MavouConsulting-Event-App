@@ -58,6 +58,28 @@ class User extends Authenticatable
     }
 
     /**
+     * FIXED: Get profile picture URL - This method was missing and causing API errors
+     */
+    public function getProfilePictureUrl(): string
+    {
+        if ($this->profile_picture) {
+            return asset('storage/profile_pictures/' . $this->profile_picture);
+        }
+        
+        // Generate unique avatar based on user ID to prevent duplicates
+        return 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . 
+               '&background=' . substr(md5($this->id), 0, 6) . '&color=fff&size=200';
+    }
+
+    /**
+     * FIXED: Alias method for API compatibility - This was the missing method causing the error
+     */
+    public function getProfilePicture(): string
+    {
+        return $this->getProfilePictureUrl();
+    }
+
+    /**
      * Update user profile
      */
     public function updateProfile(array $data): bool
@@ -117,11 +139,12 @@ class User extends Authenticatable
     }
 
     /**
-     * Get the count of events attended by this user
+     * Get the count of events attended by this user - FIXED for real-time counting
      */
     public function getEventsAttendedCount(): int
     {
-        return $this->events_attended ?? $this->attendingEvents()->count();
+        // Always get fresh count from database for accuracy
+        return DB::table('attendees')->where('user_id', $this->id)->count();
     }
 
     /**
@@ -129,22 +152,34 @@ class User extends Authenticatable
      */
     public function updateEventsAttendedCount(): void
     {
-        $this->events_attended = $this->attendingEvents()->count();
+        $this->events_attended = $this->getEventsAttendedCount();
         $this->save();
     }
 
     /**
-     * Get profile picture URL or default avatar
+     * FIXED: Get profile picture URL or default avatar - Accessor for Eloquent
      */
     public function getProfilePictureUrlAttribute(): string
     {
+        return $this->getProfilePictureUrl();
+    }
+
+    /**
+     * FIXED: Get formatted profile picture for web display
+     */
+    public function getFormattedProfilePicture(): string
+    {
         if ($this->profile_picture) {
+            // Check if it's already a full URL
+            if (filter_var($this->profile_picture, FILTER_VALIDATE_URL)) {
+                return $this->profile_picture;
+            }
+            // If it's just a filename, create the full URL
             return asset('storage/profile_pictures/' . $this->profile_picture);
         }
         
-        // Generate unique avatar based on user ID to prevent duplicates
-        return 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . 
-               '&background=' . substr(md5($this->id), 0, 6) . '&color=fff&size=200';
+        // Return default avatar
+        return asset('images/default-avatar.png');
     }
 
     /**

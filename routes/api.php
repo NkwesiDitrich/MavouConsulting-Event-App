@@ -28,11 +28,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-// Authentication routes
-Route::post('/register', [AuthController::class, 'register']);
+// FIXED: Direct API Authentication routes - NO PREFIX for /api/login to work
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/logout', [AuthController::class, 'logout'])
-     ->middleware('auth:sanctum');
+Route::post('/register', [AuthController::class, 'register']);
+
+// FIXED: Protected auth routes (still need auth middleware)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/user', [AuthController::class, 'me']); // Alias for /me
+});
 
 // Public routes (no authentication required)
 Route::prefix('public')->group(function () {
@@ -44,9 +49,34 @@ Route::prefix('public')->group(function () {
     Route::get('/categories/{category}/events', [PublicController::class, 'getEventsByCategory']);
 });
 
-// Public routes (original - for backward compatibility)
-Route::apiResource('events', EventController::class)->only(['index', 'show']);
-Route::apiResource('categories', CategoryController::class)->only(['index', 'show']);
+// FIXED: Public API routes (no authentication required)
+Route::prefix('public')->group(function () {
+    Route::get('/events', [\App\Http\Controllers\Api\EventController::class, 'publicIndex']);
+    Route::get('/events/{id}', [\App\Http\Controllers\Api\EventController::class, 'publicShow']);
+    Route::get('/categories', [\App\Http\Controllers\Api\CategoryController::class, 'index']);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    
+    // Event routes
+    Route::prefix('events')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\EventController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\EventController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\EventController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\EventController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\EventController::class, 'destroy']);
+        Route::post('/{id}/register', [\App\Http\Controllers\Api\EventController::class, 'register']);
+        Route::delete('/{id}/register', [\App\Http\Controllers\Api\EventController::class, 'unregister']);
+    });
+    
+    // Profile routes
+    Route::prefix('profile')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\ProfileController::class, 'show']);
+        Route::put('/', [\App\Http\Controllers\Api\ProfileController::class, 'update']);
+        Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'updatePassword']);
+        Route::delete('/', [\App\Http\Controllers\Api\ProfileController::class, 'destroy']);
+    });
+});
 
 // Event filtering and search routes (public)
 Route::get('/events/search', [EventController::class, 'search']);
@@ -80,10 +110,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/events/{event}/check-in', [AttendeeEnhancedController::class, 'selfCheckIn']);
     });
 
-    // Profile routes
-    Route::get('/profile', [ProfileController::class, 'show']);
-    Route::put('/profile', [ProfileController::class, 'update']);
-    Route::delete('/profile', [ProfileController::class, 'destroy']);
     
     // User events and attendances
     Route::get('/my-events', [ProfileController::class, 'myEvents']);

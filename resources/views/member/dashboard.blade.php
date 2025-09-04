@@ -8,14 +8,23 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card bg-gradient-primary text-white">
-                <div class="card-body">
+                <div class="card-body p-4">
                     <div class="row align-items-center">
                         <div class="col-md-8">
-                            <h2 class="mb-2">Welcome back, <span id="userName">Loading...</span>!</h2>
-                            <p class="mb-0 opacity-75">Here's what's happening with your events</p>
+                            <h2 class="mb-2">Welcome back, {{ Auth::user()->name }}!</h2>
+                            <p class="mb-0 opacity-75">Manage your events and discover new opportunities</p>
                         </div>
                         <div class="col-md-4 text-md-end">
-                            <img id="userAvatar" src="" alt="Profile" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">
+                            <div class="d-flex justify-content-md-end gap-2">
+                                <a href="{{ route('events.browse') }}" class="btn btn-light">
+                                    <i class="fas fa-search me-1"></i>
+                                    Browse Events
+                                </a>
+                                <a href="{{ route('member.profile') }}" class="btn btn-outline-light">
+                                    <i class="fas fa-user me-1"></i>
+                                    Profile
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -23,217 +32,227 @@
         </div>
     </div>
 
-    <!-- Stats Cards -->
+    <!-- Statistics Cards -->
     <div class="row mb-4">
-        <div class="col-md-6 col-lg-3 mb-3">
-            <div class="card stats-card text-white">
+        <div class="col-md-4 mb-3">
+            <div class="card text-center">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0" id="eventsAttended">0</h3>
-                            <p class="mb-0">Events Attended</p>
-                        </div>
-                        <i class="fas fa-calendar-check fa-2x opacity-75"></i>
+                    <div class="display-6 text-primary mb-2">
+                        <i class="fas fa-calendar-check"></i>
                     </div>
+                    <h3 class="mb-1">{{ $stats['total_registered'] }}</h3>
+                    <p class="text-muted mb-0">Total Events Registered</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3 mb-3">
-            <div class="card bg-success text-white">
+        <div class="col-md-4 mb-3">
+            <div class="card text-center">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0" id="upcomingRegistrations">0</h3>
-                            <p class="mb-0">Upcoming Events</p>
-                        </div>
-                        <i class="fas fa-calendar-plus fa-2x opacity-75"></i>
+                    <div class="display-6 text-success mb-2">
+                        <i class="fas fa-calendar-alt"></i>
                     </div>
+                    <h3 class="mb-1">{{ $stats['upcoming_events'] }}</h3>
+                    <p class="text-muted mb-0">Upcoming Events</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3 mb-3">
-            <div class="card bg-warning text-white">
+        <div class="col-md-4 mb-3">
+            <div class="card text-center">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0" id="interestsCount">0</h3>
-                            <p class="mb-0">Interests</p>
-                        </div>
-                        <i class="fas fa-heart fa-2x opacity-75"></i>
+                    <div class="display-6 text-info mb-2">
+                        <i class="fas fa-history"></i>
                     </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3 mb-3">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h3 class="mb-0" id="recommendedCount">0</h3>
-                            <p class="mb-0">Recommended</p>
-                        </div>
-                        <i class="fas fa-star fa-2x opacity-75"></i>
-                    </div>
+                    <h3 class="mb-1">{{ $stats['past_events'] }}</h3>
+                    <p class="text-muted mb-0">Past Events</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <!-- Left Column -->
-        <div class="col-lg-8">
-            <!-- Registered Events -->
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-calendar-check me-2"></i>
-                        My Upcoming Events
-                    </h5>
-                    <a href="{{ route('events.browse') }}" class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-plus me-1"></i>
-                        Find More Events
-                    </a>
-                </div>
-                <div class="card-body">
-                    <div id="registeredEvents">
-                        <div class="text-center py-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
+    <!-- My Registered Events -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">
+                    <i class="fas fa-calendar-check me-2"></i>
+                    My Registered Events
+                </h4>
+                <a href="{{ route('member.my-events') }}" class="btn btn-outline-primary btn-sm">
+                    View All
+                    <i class="fas fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+            
+            <div class="row" id="registeredEventsContainer">
+                @forelse($registeredEvents->take(6) as $registration)
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card event-card h-100">
+                            <img src="{{ $registration->event->image_url ?? '/images/default-event.jpg' }}" 
+                                 class="card-img-top" alt="{{ $registration->event->name }}" 
+                                 style="height: 200px; object-fit: cover;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h6 class="card-title mb-0">{{ $registration->event->name }}</h6>
+                                        @if($registration->event->category)
+                                            <span class="badge bg-primary">{{ $registration->event->category->name }}</span>
+                                        @endif
+                                    </div>
+                                    <p class="card-text text-muted small mb-2">
+                                        {{ Str::limit($registration->event->description, 100) }}
+                                    </p>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            {{ \Carbon\Carbon::parse($registration->event->start_time)->format('M d, Y g:i A') }}
+                                        </small>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-map-marker-alt me-1"></i>
+                                            {{ $registration->event->location ?? 'Online' }}
+                                        </small>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-success">
+                                            <i class="fas fa-check-circle me-1"></i>
+                                            Registered on {{ $registration->created_at->format('M d, Y') }}
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="mt-auto">
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-outline-primary btn-sm flex-fill" 
+                                                onclick="viewEventDetails({{ $registration->event->id }})">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Details
+                                        </button>
+                                        @if($registration->event->start_time > now())
+                                            <button class="btn btn-outline-danger btn-sm" 
+                                                    onclick="cancelRegistration({{ $registration->event->id }})">
+                                                <i class="fas fa-times me-1"></i>
+                                                Cancel
+                                            </button>
+                                        @else
+                                            <span class="btn btn-outline-secondary btn-sm disabled">
+                                                <i class="fas fa-clock me-1"></i>
+                                                Past Event
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Recommended Events -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-star me-2"></i>
-                        Recommended for You
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div id="recommendedEvents">
-                        <div class="text-center py-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
+                @empty
+                    <div class="col-12">
+                        <div class="text-center py-5">
+                            <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No registered events yet</h5>
+                            <p class="text-muted">Start exploring events and register for ones that interest you!</p>
+                            <a href="{{ route('events.browse') }}" class="btn btn-primary">
+                                <i class="fas fa-search me-1"></i>
+                                Browse Events
+                            </a>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Column -->
-        <div class="col-lg-4">
-            <!-- Quick Actions -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-bolt me-2"></i>
-                        Quick Actions
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <a href="{{ route('events.browse') }}" class="btn btn-primary">
-                            <i class="fas fa-search me-2"></i>
-                            Browse Events
-                        </a>
-                        <a href="{{ route('profile.show') }}" class="btn btn-outline-primary">
-                            <i class="fas fa-user me-2"></i>
-                            Edit Profile
-                        </a>
-                        <button class="btn btn-outline-success" onclick="updateInterests()">
-                            <i class="fas fa-heart me-2"></i>
-                            Update Interests
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- User Interests -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-heart me-2"></i>
-                        Your Interests
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div id="userInterests">
-                        <p class="text-muted">Loading...</p>
-                    </div>
-                    <button class="btn btn-outline-primary btn-sm w-100" onclick="updateInterests()">
-                        <i class="fas fa-edit me-1"></i>
-                        Update Interests
-                    </button>
-                </div>
-            </div>
-
-            <!-- Recent Activity -->
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-clock me-2"></i>
-                        Recent Activity
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div id="recentActivity">
-                        <p class="text-muted">No recent activity</p>
-                    </div>
-                </div>
+                @endforelse
             </div>
         </div>
     </div>
+
+    <!-- Recommended Events -->
+    @if($upcomingEvents->count() > 0)
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-star text-warning me-2"></i>
+                Recommended for You
+            </h4>
+            
+            <div class="row">
+                @foreach($upcomingEvents as $event)
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card event-card h-100">
+                            <img src="{{ $event->image_url ?? '/images/default-event.jpg' }}" 
+                                 class="card-img-top" alt="{{ $event->name }}" 
+                                 style="height: 200px; object-fit: cover;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h6 class="card-title mb-0">{{ $event->name }}</h6>
+                                        @if($event->category)
+                                            <span class="badge bg-primary">{{ $event->category->name }}</span>
+                                        @endif
+                                    </div>
+                                    <p class="card-text text-muted small mb-2">
+                                        {{ Str::limit($event->description, 100) }}
+                                    </p>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            {{ \Carbon\Carbon::parse($event->start_time)->format('M d, Y g:i A') }}
+                                        </small>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-map-marker-alt me-1"></i>
+                                            {{ $event->location ?? 'Online' }}
+                                        </small>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-user me-1"></i>
+                                            by {{ $event->organizer->name }}
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="mt-auto">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <div>
+                                            @if($event->is_free)
+                                                <span class="badge bg-success">Free</span>
+                                            @else
+                                                <span class="badge bg-warning">${{ $event->ticket_price }}</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-outline-primary btn-sm flex-fill" 
+                                                onclick="viewEventDetails({{ $event->id }})">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Details
+                                        </button>
+                                        <button class="btn btn-primary btn-sm flex-fill" 
+                                                onclick="registerForEvent({{ $event->id }})">
+                                            <i class="fas fa-calendar-plus me-1"></i>
+                                            Register
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+    @endif
 </div>
 
 <!-- Event Details Modal -->
-<div class="modal fade" id="eventDetailsModal" tabindex="-1">
+<div class="modal fade" id="eventModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Event Details</h5>
+                <h5 class="modal-title" id="eventModalTitle">Event Details</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <div id="eventDetailsContent">
-                    <div class="text-center py-4">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    </div>
-                </div>
+            <div class="modal-body" id="eventModalBody">
+                <!-- Event details will be loaded here -->
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <div id="eventDetailsActions">
-                    <!-- Action buttons will be added here -->
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Interests Modal -->
-<div class="modal fade" id="interestsModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Update Your Interests</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted mb-3">Select topics you're interested in to get better event recommendations.</p>
-                <div class="row" id="interestsForm">
-                    <!-- Interest checkboxes will be loaded here -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="saveInterests()">Save Interests</button>
+            <div class="modal-footer" id="eventModalFooter">
+                <!-- Action buttons will be loaded here -->
             </div>
         </div>
     </div>
@@ -242,379 +261,220 @@
 
 @push('scripts')
 <script>
-let dashboardData = {};
-let userInterests = [];
-
-document.addEventListener('DOMContentLoaded', function() {
-    loadDashboard();
-});
-
-async function loadDashboard() {
-    try {
-        const response = await axios.get('/web-api/member/dashboard');
-        dashboardData = response.data;
-        
-        // Update user info
-        document.getElementById('userName').textContent = dashboardData.user.name;
-        document.getElementById('userAvatar').src = dashboardData.user.profile_picture;
-        
-        // Update stats with REAL-TIME data
-        document.getElementById('eventsAttended').textContent = dashboardData.stats.total_events_attended;
-        document.getElementById('upcomingRegistrations').textContent = dashboardData.stats.upcoming_registrations;
-        document.getElementById('interestsCount').textContent = (dashboardData.user.interests || []).length;
-        document.getElementById('recommendedCount').textContent = dashboardData.recommended_events.length;
-        
-        // Display registered events
-        displayRegisteredEvents();
-        
-        // Display recommended events
-        displayRecommendedEvents();
-        
-        // Display user interests
-        displayUserInterests();
-        
-        userInterests = dashboardData.user.interests || [];
-        
-    } catch (error) {
-        console.error('Error loading dashboard:', error);
-        showAlert('Failed to load dashboard data', 'danger');
-        
-        // Show error state
-        document.getElementById('registeredEvents').innerHTML = `
-            <div class="text-center py-4">
-                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-3"></i>
-                <p class="text-danger">Failed to load dashboard data</p>
-                <button class="btn btn-outline-primary" onclick="loadDashboard()">Try Again</button>
-            </div>
-        `;
-    }
-}
-
-function displayRegisteredEvents() {
-    const container = document.getElementById('registeredEvents');
-    
-    if (!dashboardData.registered_events || dashboardData.registered_events.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-4">
-                <i class="fas fa-calendar-times fa-2x text-muted mb-3"></i>
-                <h6 class="text-muted">No upcoming events</h6>
-                <p class="text-muted mb-3">You haven't registered for any upcoming events yet.</p>
-                <a href="{{ route('events.browse') }}" class="btn btn-primary">
-                    <i class="fas fa-search me-1"></i>
-                    Browse Events
-                </a>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = dashboardData.registered_events.map(event => `
-        <div class="card mb-3 event-card">
-            <div class="row g-0">
-                <div class="col-md-4">
-                    <img src="${event.image_url || '/images/default-event.jpg'}" class="img-fluid rounded-start h-100" alt="${event.name}" style="object-fit: cover;">
-                </div>
-                <div class="col-md-8">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="card-title mb-0">${event.name}</h6>
-                            <span class="badge bg-primary">${event.category?.name || 'General'}</span>
-                        </div>
-                        <p class="card-text text-muted small">${event.description?.substring(0, 100) || ''}${event.description?.length > 100 ? '...' : ''}</p>
-                        <div class="mb-2">
-                            <small class="text-muted">
-                                <i class="fas fa-calendar me-1"></i>
-                                ${formatDate(event.start_time)}
-                            </small>
-                        </div>
-                        <div class="mb-2">
-                            <small class="text-muted">
-                                <i class="fas fa-map-marker-alt me-1"></i>
-                                ${event.location || 'Online'}
-                            </small>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">
-                                <i class="fas fa-user me-1"></i>
-                                by ${event.organizer?.name || 'Unknown'}
-                            </small>
-                            <button class="btn btn-outline-primary btn-sm" onclick="viewEventDetails(${event.id})">
-                                <i class="fas fa-info-circle me-1"></i>
-                                Details
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function displayRecommendedEvents() {
-    const container = document.getElementById('recommendedEvents');
-    
-    if (!dashboardData.recommended_events || dashboardData.recommended_events.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-4">
-                <i class="fas fa-star fa-2x text-muted mb-3"></i>
-                <h6 class="text-muted">No recommendations yet</h6>
-                <p class="text-muted mb-3">Update your interests to get personalized event recommendations.</p>
-                <button class="btn btn-primary" onclick="updateInterests()">
-                    <i class="fas fa-heart me-1"></i>
-                    Set Interests
-                </button>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = dashboardData.recommended_events.map(event => `
-        <div class="card mb-3 event-card">
-            <div class="row g-0">
-                <div class="col-md-4">
-                    <img src="${event.image_url || '/images/default-event.jpg'}" class="img-fluid rounded-start h-100" alt="${event.name}" style="object-fit: cover;">
-                </div>
-                <div class="col-md-8">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h6 class="card-title mb-0">${event.name}</h6>
-                            <span class="badge bg-warning">Recommended</span>
-                        </div>
-                        <p class="card-text text-muted small">${event.description?.substring(0, 100) || ''}${event.description?.length > 100 ? '...' : ''}</p>
-                        <div class="mb-2">
-                            <small class="text-muted">
-                                <i class="fas fa-calendar me-1"></i>
-                                ${formatDate(event.start_time)}
-                            </small>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">
-                                <i class="fas fa-map-marker-alt me-1"></i>
-                                ${event.location || 'Online'}
-                            </small>
-                            <div>
-                                <button class="btn btn-outline-primary btn-sm me-2" onclick="viewEventDetails(${event.id})">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Details
-                                </button>
-                                <button class="btn btn-primary btn-sm" onclick="registerForEvent(${event.id})">
-                                    <i class="fas fa-calendar-plus me-1"></i>
-                                    Register
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function displayUserInterests() {
-    const container = document.getElementById('userInterests');
-    const interests = dashboardData.user.interests || [];
-    
-    if (interests.length === 0) {
-        container.innerHTML = '<p class="text-muted">No interests selected yet</p>';
-        return;
-    }
-    
-    container.innerHTML = interests.map(interest => 
-        `<span class="badge bg-primary me-1 mb-1">${interest}</span>`
-    ).join('');
-}
-
-function updateInterests() {
-    // Load interests form
-    const form = document.getElementById('interestsForm');
-    const availableInterests = [
-        'Technology', 'Business', 'Networking', 'Education', 
-        'Arts & Culture', 'Sports', 'Health & Wellness', 'Food & Drink',
-        'Music', 'Photography', 'Travel', 'Science', 'Marketing',
-        'Design', 'Finance', 'Entrepreneurship'
-    ];
-    
-    form.innerHTML = '';
-    availableInterests.forEach((interest, index) => {
-        const col = document.createElement('div');
-        col.className = 'col-md-6 mb-2';
-        
-        const checked = userInterests.includes(interest) ? 'checked' : '';
-        col.innerHTML = `
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="${interest}" id="interest-${index}" ${checked}>
-                <label class="form-check-label" for="interest-${index}">
-                    ${interest}
-                </label>
-            </div>
-        `;
-        form.appendChild(col);
-    });
-    
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('interestsModal'));
-    modal.show();
-}
-
-async function saveInterests() {
-    const selectedInterests = [];
-    document.querySelectorAll('#interestsForm input[type="checkbox"]:checked').forEach(checkbox => {
-        selectedInterests.push(checkbox.value);
-    });
-    
-    try {
-        const response = await axios.put('/web-api/member/interests', {
-            interests: selectedInterests
-        });
-        
-        userInterests = selectedInterests;
-        showAlert(response.data.message, 'success');
-        
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('interestsModal'));
-        modal.hide();
-        
-        // Reload dashboard to get new recommendations
-        setTimeout(() => {
-            loadDashboard();
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Error updating interests:', error);
-        showAlert('Failed to update interests', 'danger');
-    }
-}
-
+// FIXED: Use the correct API endpoint for member dashboard
 async function viewEventDetails(eventId) {
     try {
-        // Show loading in modal
-        document.getElementById('eventDetailsContent').innerHTML = `
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-            </div>
-        `;
+        showLoading();
         
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
-        modal.show();
-        
-        // Load event details
+        // CRITICAL FIX: Use the correct member API endpoint
         const response = await axios.get(`/web-api/member/event-details/${eventId}`);
-        const eventData = response.data.event;
+        const data = response.data;
         
-        // Display event details
-        document.getElementById('eventDetailsContent').innerHTML = `
-            <div class="row">
-                <div class="col-md-4">
-                    <img src="${eventData.image_url}" class="img-fluid rounded" alt="${eventData.name}">
-                </div>
-                <div class="col-md-8">
-                    <h4>${eventData.name}</h4>
-                    ${eventData.slogan ? `<p class="text-muted fst-italic">"${eventData.slogan}"</p>` : ''}
-                    <p><strong>Description:</strong> ${eventData.description || 'No description available'}</p>
-                    
-                    <div class="row mb-3">
-                        <div class="col-sm-6">
-                            <p><strong>Location:</strong> ${eventData.location}</p>
-                            <p><strong>Category:</strong> ${eventData.category}</p>
-                            <p><strong>Event Type:</strong> ${eventData.event_type}</p>
-                        </div>
-                        <div class="col-sm-6">
-                            <p><strong>Audience:</strong> ${eventData.audience}</p>
-                            <p><strong>Organizer:</strong> ${eventData.organizer_name}</p>
-                            <p><strong>Attendees:</strong> ${eventData.attendee_count}</p>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-sm-6">
-                            <p><strong>Start Time:</strong><br>${formatDateTime(eventData.start_time)}</p>
-                        </div>
-                        <div class="col-sm-6">
-                            <p><strong>End Time:</strong><br>${formatDateTime(eventData.end_time)}</p>
-                        </div>
-                    </div>
-                    
-                    ${eventData.is_registered ? '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>You are registered for this event</div>' : ''}
-                    ${eventData.is_organizer ? '<div class="alert alert-info"><i class="fas fa-crown me-2"></i>You are the organizer of this event</div>' : ''}
-                </div>
-            </div>
-        `;
-        
-        // Update action buttons
-        let actionButtons = '';
-        if (eventData.is_organizer) {
-            actionButtons = `<button type="button" class="btn btn-warning">Manage Event</button>`;
-        } else if (eventData.is_registered) {
-            actionButtons = `<button type="button" class="btn btn-danger" onclick="unregisterFromEvent(${eventData.id})">Unregister</button>`;
-        } else {
-            actionButtons = `<button type="button" class="btn btn-primary" onclick="registerForEvent(${eventData.id})">Register</button>`;
+        if (!data.success) {
+            throw new Error(data.message || 'Failed to load event details');
         }
         
-        document.getElementById('eventDetailsActions').innerHTML = actionButtons;
+        const event = data.event;
+        const stats = data.stats;
+        const registration = data.registration;
+        
+        // Populate modal title
+        document.getElementById('eventModalTitle').textContent = event.name;
+        
+        // Populate modal body
+        const modalBody = document.getElementById('eventModalBody');
+        modalBody.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <img src="${event.image_url || '/images/default-event.jpg'}" 
+                         class="img-fluid rounded mb-3" alt="${event.name}">
+                </div>
+                <div class="col-md-6">
+                    <h5>${event.name}</h5>
+                    <p class="text-muted">${event.description || 'No description available'}</p>
+                    
+                    <div class="mb-2">
+                        <strong><i class="fas fa-calendar me-2"></i>Start:</strong>
+                        ${formatDateTime(event.start_time)}
+                    </div>
+                    
+                    ${event.end_time ? `
+                    <div class="mb-2">
+                        <strong><i class="fas fa-calendar me-2"></i>End:</strong>
+                        ${formatDateTime(event.end_time)}
+                    </div>
+                    ` : ''}
+                    
+                    <div class="mb-2">
+                        <strong><i class="fas fa-map-marker-alt me-2"></i>Location:</strong>
+                        ${event.location || 'Online'}
+                    </div>
+                    
+                    <div class="mb-2">
+                        <strong><i class="fas fa-user me-2"></i>Organizer:</strong>
+                        ${event.organizer.name}
+                    </div>
+                    
+                    <div class="mb-2">
+                        <strong><i class="fas fa-users me-2"></i>Attendees:</strong>
+                        ${stats.attendee_count}
+                        ${event.max_attendees ? ` / ${event.max_attendees}` : ''}
+                    </div>
+                    
+                    ${event.category ? `
+                    <div class="mb-2">
+                        <strong><i class="fas fa-tag me-2"></i>Category:</strong>
+                        <span class="badge bg-primary">${event.category.name}</span>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="mb-2">
+                        <strong><i class="fas fa-dollar-sign me-2"></i>Price:</strong>
+                        ${event.is_free ? '<span class="badge bg-success">Free</span>' : `$${event.ticket_price}`}
+                    </div>
+                    
+                    ${stats.is_registered ? `
+                    <div class="mb-2">
+                        <strong><i class="fas fa-check-circle me-2 text-success"></i>Status:</strong>
+                        <span class="badge bg-success">Registered</span>
+                        ${registration ? `<small class="text-muted d-block">Registered on ${formatDate(registration.registered_at)}</small>` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        
+        // Populate modal footer
+        const modalFooter = document.getElementById('eventModalFooter');
+        const isUpcoming = new Date(event.start_time) > new Date();
+        
+        let footerContent = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+        
+        if (stats.is_registered) {
+            if (isUpcoming) {
+                footerContent += `
+                    <button type="button" class="btn btn-outline-danger" 
+                            onclick="cancelRegistration(${event.id})" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>
+                        Cancel Registration
+                    </button>
+                `;
+            }
+        } else if (isUpcoming && stats.registration_open) {
+            footerContent += `
+                <button type="button" class="btn btn-primary" 
+                        onclick="registerForEvent(${event.id})" data-bs-dismiss="modal">
+                    <i class="fas fa-calendar-plus me-1"></i>
+                    Register for Event
+                </button>
+            `;
+        }
+        
+        modalFooter.innerHTML = footerContent;
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('eventModal'));
+        modal.show();
         
     } catch (error) {
         console.error('Error loading event details:', error);
-        document.getElementById('eventDetailsContent').innerHTML = `
-            <div class="text-center py-4">
-                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-3"></i>
-                <p class="text-danger">Failed to load event details</p>
-            </div>
-        `;
+        showAlert('Failed to load event details: ' + (error.response?.data?.message || error.message), 'danger');
+    } finally {
+        hideLoading();
     }
 }
 
 async function registerForEvent(eventId) {
     try {
-        const response = await axios.post(`/web-api/events/${eventId}/register`);
-        showAlert(response.data.message, 'success');
+        showLoading();
         
-        // Close modal if open
-        const modal = bootstrap.Modal.getInstance(document.getElementById('eventDetailsModal'));
-        if (modal) modal.hide();
+        const response = await axios.post(`/web-api/member/events/${eventId}/register`);
         
-        // Reload dashboard to update registered events
-        setTimeout(() => {
-            loadDashboard();
-        }, 1000);
+        if (response.data.success) {
+            showAlert(response.data.message, 'success');
+            // Refresh the page to update the dashboard
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            throw new Error(response.data.message || 'Registration failed');
+        }
         
     } catch (error) {
         console.error('Error registering for event:', error);
         if (error.response && error.response.status === 401) {
             showAlert('Please login to register for events', 'warning');
+            window.location.href = '/login';
         } else {
-            showAlert(error.response?.data?.message || 'Failed to register for event', 'danger');
+            showAlert('Failed to register: ' + (error.response?.data?.message || error.message), 'danger');
         }
+    } finally {
+        hideLoading();
+    }
+}
+
+async function cancelRegistration(eventId) {
+    if (!confirm('Are you sure you want to cancel your registration for this event?')) {
+        return;
+    }
+    
+    try {
+        showLoading();
+        
+        const response = await axios.delete(`/web-api/member/events/${eventId}/register`);
+        
+        if (response.data.success) {
+            showAlert(response.data.message, 'success');
+            // Refresh the page to update the dashboard
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            throw new Error(response.data.message || 'Cancellation failed');
+        }
+        
+    } catch (error) {
+        console.error('Error cancelling registration:', error);
+        showAlert('Failed to cancel registration: ' + (error.response?.data?.message || error.message), 'danger');
+    } finally {
+        hideLoading();
     }
 }
 
 // Utility functions
+function formatDateTime(dateTimeString) {
+    const date = new Date(dateTimeString);
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
 function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
-        weekday: 'short',
         year: 'numeric',
-        month: 'short',
+        month: 'long',
         day: 'numeric'
     });
 }
 
-function formatDateTime(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+function showLoading() {
+    // You can implement a loading spinner here
+    console.log('Loading...');
 }
 
-function showAlert(message, type) {
-    // Create alert element
+function hideLoading() {
+    // Hide loading spinner
+    console.log('Loading complete');
+}
+
+function showAlert(message, type = 'info') {
+    // Create and show Bootstrap alert
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
     alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
@@ -625,10 +485,10 @@ function showAlert(message, type) {
     
     document.body.appendChild(alertDiv);
     
-    // Auto remove after 5 seconds
+    // Auto-remove after 5 seconds
     setTimeout(() => {
         if (alertDiv.parentNode) {
-            alertDiv.parentNode.removeChild(alertDiv);
+            alertDiv.remove();
         }
     }, 5000);
 }

@@ -172,6 +172,45 @@ Route::prefix('web-api')->group(function () {
     Route::get('/categories', [EventController::class, 'getCategories']);
 });
 
+// Web API routes for AJAX calls
+Route::prefix('web-api')->name('api.')->group(function () {
+    // Public event routes
+    Route::get('/events', [EventController::class, 'apiIndex']);
+    Route::get('/events/featured', [EventController::class, 'apiFeatured']);
+    Route::get('/events/search', [EventController::class, 'apiSearch']);
+    Route::get('/events/{event}', [EventController::class, 'apiShow']);
+    
+    // Member-specific routes (authenticated)
+    Route::middleware('auth')->prefix('member')->group(function () {
+        // CRITICAL FIX: Add the missing event details route
+        Route::get('/event-details/{event}', [MemberController::class, 'getEventDetails']);
+        
+        // Event registration routes
+        Route::post('/events/{event}/register', [MemberController::class, 'registerForEvent']);
+        Route::delete('/events/{event}/register', [MemberController::class, 'cancelRegistration']);
+    });
+    
+    // General event registration routes (for browse page)
+    Route::middleware('auth')->group(function () {
+        Route::post('/events/{event}/register', [MemberController::class, 'registerForEvent']);
+        Route::delete('/events/{event}/register', [MemberController::class, 'cancelRegistration']);
+    });
+});
+
+require __DIR__.'/auth.php';
+// Event routes
+Route::get('/events', [EventController::class, 'index'])->name('events.index');
+Route::get('/events/browse', [EventController::class, 'browse'])->name('events.browse');
+Route::get('/events/{event}', [EventController::class, 'show'])->name('events.show');
+
+// Member routes (authenticated users)
+Route::middleware('auth')->prefix('member')->name('member.')->group(function () {
+    Route::get('/dashboard', [MemberController::class, 'dashboard'])->name('dashboard');
+    Route::get('/profile', [MemberController::class, 'profile'])->name('profile');
+    Route::post('/profile', [MemberController::class, 'updateProfile'])->name('profile.update');
+    Route::get('/my-events', [MemberController::class, 'myEvents'])->name('my-events');
+});
+
 // Protected web API routes (require web session authentication)
 Route::middleware(['auth'])->prefix('web-api')->group(function () {
     // Member routes

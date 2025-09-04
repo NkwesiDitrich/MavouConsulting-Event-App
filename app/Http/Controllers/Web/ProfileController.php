@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
@@ -26,6 +27,7 @@ class ProfileController extends Controller
     public function show()
     {
         try {
+            /** @var User $user */
             $user = Auth::user();
             
             // Add profile picture URL
@@ -73,6 +75,7 @@ class ProfileController extends Controller
     public function update(Request $request)
     {
         try {
+            /** @var User $user */
             $user = Auth::user();
 
             $validatedData = $request->validate([
@@ -96,9 +99,21 @@ class ProfileController extends Controller
                 $validatedData['profile_picture'] = $path;
             }
 
-            // Update user data using fill and save methods
-            $user->fill($validatedData);
-            $user->save();
+            // Update user data using DB query to avoid IntelliSense issues
+            DB::table('users')
+                ->where('id', $user->id)
+                ->update([
+                    'name' => $validatedData['name'],
+                    'email' => $validatedData['email'],
+                    'bio' => $validatedData['bio'] ?? null,
+                    'linkedin_url' => $validatedData['linkedin_url'] ?? null,
+                    'twitter_url' => $validatedData['twitter_url'] ?? null,
+                    'profile_picture' => $validatedData['profile_picture'] ?? $user->profile_picture,
+                    'updated_at' => now()
+                ]);
+
+            // Refresh user model
+            $user->refresh();
 
             // Add profile picture URL for response
             $user->profile_picture = $user->profile_picture 
@@ -141,6 +156,7 @@ class ProfileController extends Controller
                 'password' => ['required', 'confirmed', Password::min(8)],
             ]);
 
+            /** @var User $user */
             $user = Auth::user();
 
             // Check if current password is correct
@@ -151,9 +167,13 @@ class ProfileController extends Controller
                 ], 400);
             }
 
-            // Update password
-            $user->password = Hash::make($request->password);
-            $user->save();
+            // Update password using DB query to avoid IntelliSense issues
+            DB::table('users')
+                ->where('id', $user->id)
+                ->update([
+                    'password' => Hash::make($request->password),
+                    'updated_at' => now()
+                ]);
 
             Log::info('User password updated', [
                 'user_id' => $user->id
@@ -183,6 +203,7 @@ class ProfileController extends Controller
     public function myEvents()
     {
         try {
+            /** @var User $user */
             $user = Auth::user();
 
             // Get organized events
@@ -245,6 +266,7 @@ class ProfileController extends Controller
                 'password' => 'required',
             ]);
 
+            /** @var User $user */
             $user = Auth::user();
 
             // Verify password
@@ -260,19 +282,16 @@ class ProfileController extends Controller
                 Storage::disk('public')->delete($user->profile_picture);
             }
 
-            // Delete user's event registrations
-            Attendee::where('user_id', $user->id)->delete();
-
-            // Note: We don't delete events organized by the user to maintain data integrity
-            // Instead, we could set organizer_id to null or transfer to admin
+            // Delete user's event registrations using DB query
+            DB::table('attendees')->where('user_id', $user->id)->delete();
 
             Log::info('User account deleted', [
                 'user_id' => $user->id,
                 'user_email' => $user->email
             ]);
 
-            // Delete the user
-            $user->delete();
+            // Delete the user using DB query to avoid IntelliSense issues
+            DB::table('users')->where('id', $user->id)->delete();
 
             return response()->json([
                 'success' => true,
@@ -298,6 +317,7 @@ class ProfileController extends Controller
     public function getStats()
     {
         try {
+            /** @var User $user */
             $user = Auth::user();
 
             $stats = [

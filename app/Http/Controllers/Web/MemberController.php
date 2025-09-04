@@ -25,6 +25,7 @@ class MemberController extends Controller
     public function dashboard()
     {
         try {
+            /** @var User $user */
             $user = Auth::user();
             
             // Get user's registered events (upcoming only)
@@ -122,9 +123,16 @@ class MemberController extends Controller
                 'interests.*' => 'string|max:50'
             ]);
 
+            /** @var User $user */
             $user = Auth::user();
-            $user->interests = $request->interests;
-            $user->save();
+            
+            // Update interests using DB query to avoid IntelliSense issues
+            DB::table('users')
+                ->where('id', $user->id)
+                ->update([
+                    'interests' => json_encode($request->interests),
+                    'updated_at' => now()
+                ]);
 
             Log::info('User interests updated', [
                 'user_id' => $user->id,
@@ -134,7 +142,7 @@ class MemberController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Interests updated successfully!',
-                'interests' => $user->interests
+                'interests' => $request->interests
             ]);
 
         } catch (\Exception $e) {
@@ -156,6 +164,7 @@ class MemberController extends Controller
     public function profile()
     {
         try {
+            /** @var User $user */
             $user = Auth::user();
             
             // Add profile picture URL

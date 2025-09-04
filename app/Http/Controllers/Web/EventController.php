@@ -6,153 +6,305 @@ use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\Category;
 use App\Models\Attendee;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class EventController extends Controller
 {
     /**
-     * Browse public events without authentication
+     * Browse events with filtering and search
      */
     public function browseEvents(Request $request)
     {
         try {
-            $query = Event::with(['organizer:id,name', 'category:id,name'])
-                ->where('start_time', '>', now())
-                ->orderBy('start_time');
+            $query = Event::with(['category', 'organizer'])
+                ->where('start_time', '>', Carbon::now());
 
-            // Apply filters if provided
-            if ($request->has('category') && $request->category) {
+            // Apply filters
+            if ($request->filled('category')) {
                 $query->where('category_id', $request->category);
             }
 
-            if ($request->has('event_type') && $request->event_type) {
-                $query->where('event_type', $request->event_type);
-            }
-
-            if ($request->has('location') && $request->location) {
+            if ($request->filled('location')) {
                 $query->where('location', 'like', '%' . $request->location . '%');
             }
 
-            if ($request->has('date_from') && $request->date_from) {
+            if ($request->filled('date_from')) {
                 $query->where('start_time', '>=', $request->date_from);
             }
 
-            if ($request->has('date_to') && $request->date_to) {
+            if ($request->filled('date_to')) {
                 $query->where('start_time', '<=', $request->date_to);
             }
 
-            $events = $query->paginate(12);
-
-            // Add attendee counts to events
-            foreach ($events as $event) {
-                $event->attendees_count = Attendee::where('event_id', $event->id)->count();
+            if ($request->filled('search')) {
+                $searchTerm = $request->search;
+                $query->where(function($q) use ($searchTerm) {
+                    $q->where('name', 'like', '%' . $searchTerm . '%')
+                      ->orWhere('description', 'like', '%' . $searchTerm . '%');
+                });
             }
 
+            // Sort events
+            $sortBy = $request->get('sort', 'start_time');
+            $sortOrder = $request->get('order', 'asc');
+            $query->orderBy($sortBy, $sortOrder);
+
+            // Paginate results
+            $perPage = $request->get('per_page', 12);
+            $events = $query->paginate($perPage);
+
+            // Add additional data for each event
+            $events->getCollection()->transform(function ($event) {
+                $event->image_url = $event->image 
+                    ? asset('storage/' . $event->image) 
+                    : asset('images/default-event.jpg');
+                
+                $event->attendee_count = $event->attendees()->count();
+                $event->is_full = $event->attendee_count >= $event->max_attendees;
+                
+                // Check if current user is registered
+                if (Auth::check()) {
+                    $event->is_registered = $event->attendees()
+                        ->where('user_id', Auth::id())
+                        ->exists();
+                } else {
+                    $event->is_registered = false;
+                }
+
+                return $event;
+            });
+
+            // Get categories for filter dropdown
+            $categories = Category::withCount('events')->get();
+
             return response()->json([
+                'success' => true,
                 'events' => $events,
+                'categories' => $categories,
                 'filters' => [
-                    'categories' => Category::select('id', 'name')->get(),
-                    'event_types' => Event::distinct()->pluck('event_type')->filter()->values(),
-                    'locations' => Event::distinct()->pluck('location')->filter()->values()
+                    'category' => $request->category,
+                    'location' => $request->location,
+                    'date_from' => $request->date_from,
+                    'date_to' => $request->date_to,
+                    'search' => $request->search,
+                    'sort' => $sortBy,
+                    'order' => $sortOrder
                 ]
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Browse events error: ' . $e->getMessage());
+            Log::error('Error browsing events: ' . $e->getMessage(), [
+                'request_data' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to load events',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to load events'
             ], 500);
         }
     }
 
     /**
-     * Search events without authentication
+     * Search events (for AJAX search)
      */
     public function searchEvents(Request $request)
     {
         try {
-            $request->validate([
-                'q' => 'required|string|min:2',
-                'limit' => 'nullable|integer|max:50'
-            ]);
-
-            $searchTerm = $request->q;
-            $limit = $request->limit ?? 10;
-
-            $events = Event::with(['organizer:id,name', 'category:id,name'])
-                ->where('start_time', '>', now())
-                ->where(function ($query) use ($searchTerm) {
-                    $query->where('name', 'like', "%{$searchTerm}%")
-                          ->orWhere('description', 'like', "%{$searchTerm}%")
-                          ->orWhere('location', 'like', "%{$searchTerm}%")
-                          ->orWhere('event_type', 'like', "%{$searchTerm}%");
-                })
-                ->orderBy('start_time')
-                ->limit($limit)
-                ->get();
-
-            // Add attendee counts
-            foreach ($events as $event) {
-                $event->attendees_count = Attendee::where('event_id', $event->id)->count();
+            $searchTerm = $request->get('q', '');
+            
+            if (empty($searchTerm)) {
+                return response()->json([
+                    'success' => true,
+                    'events' => []
+                ]);
             }
 
+            $events = Event::with(['category', 'organizer'])
+                ->where('start_time', '>', Carbon::now())
+                ->where(function($query) use ($searchTerm) {
+                    $query->where('name', 'like', '%' . $searchTerm . '%')
+                          ->orWhere('description', 'like', '%' . $searchTerm . '%')
+                          ->orWhere('location', 'like', '%' . $searchTerm . '%');
+                })
+                ->orderBy('start_time', 'asc')
+                ->limit(10)
+                ->get();
+
+            // Add additional data
+            $events->transform(function ($event) {
+                $event->image_url = $event->image 
+                    ? asset('storage/' . $event->image) 
+                    : asset('images/default-event.jpg');
+                
+                $event->attendee_count = $event->attendees()->count();
+                
+                return $event;
+            });
+
             return response()->json([
-                'events' => $events,
-                'search_term' => $searchTerm,
-                'total_results' => $events->count()
+                'success' => true,
+                'events' => $events
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Search events error: ' . $e->getMessage());
+            Log::error('Error searching events: ' . $e->getMessage());
+
             return response()->json([
-                'message' => 'Failed to search events',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Search failed'
             ], 500);
         }
     }
 
     /**
-     * Get event details without authentication
+     * Get event details
      */
     public function getEventDetails($id)
     {
         try {
-            $event = Event::with(['organizer:id,name,profile_picture', 'category:id,name'])
+            $event = Event::with(['category', 'organizer', 'attendees.user'])
                 ->findOrFail($id);
 
-            // Add attendee count and basic stats
-            $attendeeCount = Attendee::where('event_id', $event->id)->count();
-            $checkedInCount = Attendee::where('event_id', $event->id)
-                ->where('checked_in', true)->count();
+            // Add additional data
+            $event->image_url = $event->image 
+                ? asset('storage/' . $event->image) 
+                : asset('images/default-event.jpg');
+            
+            $event->attendee_count = $event->attendees()->count();
+            $event->is_full = $event->attendee_count >= $event->max_attendees;
+            $event->spots_remaining = $event->max_attendees - $event->attendee_count;
+            
+            // Check if registration is still open
+            $event->registration_open = Carbon::now()->lt(Carbon::parse($event->registration_deadline ?? $event->start_time));
+            
+            // Check if current user is registered
+            if (Auth::check()) {
+                $event->is_registered = $event->attendees()
+                    ->where('user_id', Auth::id())
+                    ->exists();
+                
+                $event->can_register = !$event->is_registered && 
+                                     !$event->is_full && 
+                                     $event->registration_open;
+            } else {
+                $event->is_registered = false;
+                $event->can_register = !$event->is_full && $event->registration_open;
+            }
 
-            // Get organizer profile picture URL
-            $organizerProfilePicture = $event->organizer->profile_picture ? 
-                asset('storage/profile_pictures/' . $event->organizer->profile_picture) : 
-                'https://ui-avatars.com/api/?name=' . urlencode($event->organizer->name) . 
-                '&background=' . substr(md5($event->organizer->id), 0, 6) . '&color=fff&size=200';
+            // Add organizer profile picture
+            if ($event->organizer && $event->organizer->profile_picture) {
+                $event->organizer->profile_picture_url = asset('storage/' . $event->organizer->profile_picture);
+            } else {
+                $event->organizer->profile_picture_url = asset('images/default-avatar.png');
+            }
 
             return response()->json([
-                'event' => $event,
-                'stats' => [
-                    'attendee_count' => $attendeeCount,
-                    'checked_in_count' => $checkedInCount,
-                    'is_full' => $event->max_attendees ? $attendeeCount >= $event->max_attendees : false,
-                    'registration_open' => !$event->registration_deadline || now() <= $event->registration_deadline
-                ],
-                'organizer' => [
-                    'id' => $event->organizer->id,
-                    'name' => $event->organizer->name,
-                    'profile_picture' => $organizerProfilePicture
-                ]
+                'success' => true,
+                'event' => $event
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Get event details error: ' . $e->getMessage());
+            Log::error('Error getting event details: ' . $e->getMessage(), [
+                'event_id' => $id
+            ]);
+
             return response()->json([
-                'message' => 'Failed to load event details',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Event not found'
+            ], 404);
+        }
+    }
+
+    /**
+     * Register for an event
+     */
+    public function registerForEvent(Request $request, $id)
+    {
+        try {
+            // Check if user is authenticated
+            if (!Auth::check()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please login to register for events'
+                ], 401);
+            }
+
+            $user = Auth::user();
+            $event = Event::findOrFail($id);
+
+            // Check if event exists and is in the future
+            if (Carbon::parse($event->start_time)->isPast()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot register for past events'
+                ], 400);
+            }
+
+            // Check if registration is still open
+            $registrationDeadline = $event->registration_deadline ?? $event->start_time;
+            if (Carbon::now()->gt(Carbon::parse($registrationDeadline))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Registration deadline has passed'
+                ], 400);
+            }
+
+            // Check if user is already registered
+            $existingRegistration = Attendee::where('user_id', $user->id)
+                ->where('event_id', $event->id)
+                ->first();
+
+            if ($existingRegistration) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are already registered for this event'
+                ], 400);
+            }
+
+            // Check if event is full
+            $currentAttendees = Attendee::where('event_id', $event->id)->count();
+            if ($currentAttendees >= $event->max_attendees) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This event is full'
+                ], 400);
+            }
+
+            // Register user for event
+            $attendee = new Attendee();
+            $attendee->user_id = $user->id;
+            $attendee->event_id = $event->id;
+            $attendee->registration_date = Carbon::now();
+            $attendee->status = 'registered';
+            $attendee->save();
+
+            Log::info('User registered for event', [
+                'user_id' => $user->id,
+                'event_id' => $event->id,
+                'event_name' => $event->name
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Successfully registered for ' . $event->name . '!'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error registering for event: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'event_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed. Please try again.'
             ], 500);
         }
     }
@@ -163,114 +315,96 @@ class EventController extends Controller
     public function getFeaturedEvents()
     {
         try {
-            $events = Event::with(['organizer:id,name', 'category:id,name'])
-                ->where('start_time', '>', now())
-                ->orderBy('start_time')
+            $events = Event::with(['category', 'organizer'])
+                ->where('start_time', '>', Carbon::now())
+                ->where('is_featured', true)
+                ->orderBy('start_time', 'asc')
                 ->limit(6)
                 ->get();
 
-            // Add attendee counts
-            foreach ($events as $event) {
-                $event->attendees_count = Attendee::where('event_id', $event->id)->count();
-            }
+            // Add additional data
+            $events->transform(function ($event) {
+                $event->image_url = $event->image 
+                    ? asset('storage/' . $event->image) 
+                    : asset('images/default-event.jpg');
+                
+                $event->attendee_count = $event->attendees()->count();
+                
+                return $event;
+            });
 
             return response()->json([
-                'featured_events' => $events
+                'success' => true,
+                'events' => $events
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Get featured events error: ' . $e->getMessage());
+            Log::error('Error getting featured events: ' . $e->getMessage());
+
             return response()->json([
-                'message' => 'Failed to load featured events',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to load featured events'
             ], 500);
         }
     }
 
     /**
-     * Register for an event - REQUIRES AUTHENTICATION
+     * Unregister from an event
      */
-    public function registerForEvent(Request $request, $id)
+    public function unregisterFromEvent($id)
     {
         try {
             if (!Auth::check()) {
                 return response()->json([
-                    'message' => 'Please login to register for an event'
+                    'success' => false,
+                    'message' => 'Please login first'
                 ], 401);
             }
 
-            $event = Event::findOrFail($id);
             $user = Auth::user();
+            $event = Event::findOrFail($id);
 
-            // Check if user is already registered
-            $existingAttendee = Attendee::where('event_id', $event->id)
-                ->where('user_id', $user->id)
+            $attendee = Attendee::where('user_id', $user->id)
+                ->where('event_id', $event->id)
                 ->first();
 
-            if ($existingAttendee) {
+            if (!$attendee) {
                 return response()->json([
-                    'message' => 'You are already registered for this event'
+                    'success' => false,
+                    'message' => 'You are not registered for this event'
                 ], 400);
             }
 
-            // Check if event is full
-            if ($event->max_attendees) {
-                $currentAttendees = Attendee::where('event_id', $event->id)->count();
-                if ($currentAttendees >= $event->max_attendees) {
-                    return response()->json([
-                        'message' => 'This event is full'
-                    ], 400);
-                }
-            }
-
-            // Check if registration is still open
-            if ($event->registration_deadline && now() > $event->registration_deadline) {
+            // Check if event has already started
+            if (Carbon::parse($event->start_time)->isPast()) {
                 return response()->json([
-                    'message' => 'Registration for this event has closed'
+                    'success' => false,
+                    'message' => 'Cannot unregister from events that have already started'
                 ], 400);
             }
 
-            // Create attendee record
-            $attendee = Attendee::create([
-                'event_id' => $event->id,
+            $attendee->delete();
+
+            Log::info('User unregistered from event', [
                 'user_id' => $user->id,
-                'checked_in' => false
+                'event_id' => $event->id,
+                'event_name' => $event->name
             ]);
 
-            // User remains 'member' globally - they become 'attendee' only for this specific event
-            // No need to change global role as per your requirements
-
             return response()->json([
-                'message' => 'Successfully registered for the event!',
-                'attendee' => $attendee
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('Register for event error: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to register for event',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get event categories
-     */
-    public function getCategories()
-    {
-        try {
-            $categories = Category::withCount('events')->get();
-
-            return response()->json([
-                'categories' => $categories
+                'success' => true,
+                'message' => 'Successfully unregistered from ' . $event->name
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Get categories error: ' . $e->getMessage());
+            Log::error('Error unregistering from event: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'event_id' => $id
+            ]);
+
             return response()->json([
-                'message' => 'Failed to load categories',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to unregister. Please try again.'
             ], 500);
         }
     }

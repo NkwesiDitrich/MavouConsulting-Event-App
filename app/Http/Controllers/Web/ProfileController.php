@@ -3,15 +3,23 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\Event;
 use App\Models\Attendee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     /**
      * Show user profile
      */
@@ -20,40 +28,41 @@ class ProfileController extends Controller
         try {
             $user = Auth::user();
             
-            if (!$user) {
-                return response()->json([
-                    'message' => 'User not authenticated'
-                ], 401);
-            }
+            // Add profile picture URL
+            $user->profile_picture = $user->profile_picture 
+                ? asset('storage/' . $user->profile_picture) 
+                : asset('images/default-avatar.png');
 
-            // Get profile picture URL
-            $profilePictureUrl = $user->profile_picture ? 
-                asset('storage/profile_pictures/' . $user->profile_picture) : 
-                'https://ui-avatars.com/api/?name=' . urlencode($user->name) . 
-                '&background=' . substr(md5($user->id), 0, 6) . '&color=fff&size=200';
-            
+            // Get user's organized events
+            $organizedEvents = Event::where('organizer_id', $user->id)
+                ->with('category')
+                ->orderBy('start_time', 'desc')
+                ->get();
+
+            // Get user's attended events
+            $attendedEvents = Event::whereHas('attendees', function($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
+            ->with(['category', 'organizer'])
+            ->orderBy('start_time', 'desc')
+            ->get();
+
             return response()->json([
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'profile_picture' => $profilePictureUrl,
-                    'bio' => $user->bio,
-                    'linkedin_url' => $user->linkedin_url,
-                    'twitter_url' => $user->twitter_url,
-                    'interests' => $user->interests ?? [],
-                    'events_attended' => $user->events_attended ?? 0,
-                    'created_at' => $user->created_at,
-                    'updated_at' => $user->updated_at
-                ]
+                'success' => true,
+                'user' => $user,
+                'organized_events' => $organizedEvents,
+                'attended_events' => $attendedEvents
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Profile show error: ' . $e->getMessage());
+            Log::error('Error loading profile: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to load profile data',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to load profile data'
             ], 500);
         }
     }
@@ -65,15 +74,13 @@ class ProfileController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
                 'bio' => 'nullable|string|max:1000',
-                'linkedin_url' => 'nullable|url',
-                'twitter_url' => 'nullable|url',
-                'interests' => 'nullable|array',
-                'interests.*' => 'string|max:50',
+                'linkedin_url' => 'nullable|url|max:255',
+                'twitter_url' => 'nullable|url|max:255',
                 'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
             ]);
 
@@ -81,115 +88,149 @@ class ProfileController extends Controller
             if ($request->hasFile('profile_picture')) {
                 // Delete old profile picture if exists
                 if ($user->profile_picture) {
-                    Storage::delete('public/profile_pictures/' . $user->profile_picture);
+                    Storage::disk('public')->delete($user->profile_picture);
                 }
-                
-                $image = $request->file('profile_picture');
-                $imageName = time() . '_' . $image->getClientOriginalName();
-                $image->storeAs('public/profile_pictures', $imageName);
-                $validatedData['profile_picture'] = $imageName;
+
+                // Store new profile picture
+                $path = $request->file('profile_picture')->store('profile-pictures', 'public');
+                $validatedData['profile_picture'] = $path;
             }
 
-            $user->update($validatedData);
+            // Update user data using fill and save methods
+            $user->fill($validatedData);
+            $user->save();
 
-            // Get updated profile picture URL
-            $profilePictureUrl = $user->profile_picture ? 
-                asset('storage/profile_pictures/' . $user->profile_picture) : 
-                'https://ui-avatars.com/api/?name=' . urlencode($user->name) . 
-                '&background=' . substr(md5($user->id), 0, 6) . '&color=fff&size=200';
+            // Add profile picture URL for response
+            $user->profile_picture = $user->profile_picture 
+                ? asset('storage/' . $user->profile_picture) 
+                : asset('images/default-avatar.png');
+
+            Log::info('User profile updated', [
+                'user_id' => $user->id,
+                'updated_fields' => array_keys($validatedData)
+            ]);
 
             return response()->json([
-                'message' => 'Profile updated successfully',
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'profile_picture' => $profilePictureUrl,
-                    'bio' => $user->bio,
-                    'linkedin_url' => $user->linkedin_url,
-                    'twitter_url' => $user->twitter_url,
-                    'interests' => $user->interests ?? [],
-                    'events_attended' => $user->events_attended ?? 0
-                ]
+                'success' => true,
+                'message' => 'Profile updated successfully!',
+                'user' => $user
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Profile update error: ' . $e->getMessage());
+            Log::error('Error updating profile: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'request_data' => $request->except(['profile_picture']),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to update profile',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to update profile'
             ], 500);
         }
     }
 
     /**
-     * Update password
+     * Update user password
      */
     public function updatePassword(Request $request)
     {
         try {
             $request->validate([
                 'current_password' => 'required',
-                'password' => 'required|string|min:8|confirmed'
+                'password' => ['required', 'confirmed', Password::min(8)],
             ]);
 
             $user = Auth::user();
 
+            // Check if current password is correct
             if (!Hash::check($request->current_password, $user->password)) {
                 return response()->json([
+                    'success' => false,
                     'message' => 'Current password is incorrect'
                 ], 400);
             }
 
-            $user->update([
-                'password' => Hash::make($request->password)
+            // Update password
+            $user->password = Hash::make($request->password);
+            $user->save();
+
+            Log::info('User password updated', [
+                'user_id' => $user->id
             ]);
 
             return response()->json([
-                'message' => 'Password updated successfully'
+                'success' => true,
+                'message' => 'Password updated successfully!'
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Password update error: ' . $e->getMessage());
+            Log::error('Error updating password: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to update password',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to update password'
             ], 500);
         }
     }
 
     /**
-     * Get user's events
+     * Get user's events (organized and attended)
      */
     public function myEvents()
     {
         try {
             $user = Auth::user();
-            
-            // Get events organized by user
+
+            // Get organized events
             $organizedEvents = Event::where('organizer_id', $user->id)
-                ->with(['category:id,name'])
+                ->with(['category', 'attendees'])
                 ->orderBy('start_time', 'desc')
                 ->get();
 
-            // Get events attended by user
-            $attendedEventIds = Attendee::where('user_id', $user->id)->pluck('event_id');
-            $attendedEvents = Event::whereIn('id', $attendedEventIds)
-                ->with(['organizer:id,name', 'category:id,name'])
-                ->orderBy('start_time', 'desc')
-                ->get();
+            // Add attendee count to organized events
+            $organizedEvents->transform(function ($event) {
+                $event->attendee_count = $event->attendees->count();
+                $event->image_url = $event->image 
+                    ? asset('storage/' . $event->image) 
+                    : asset('images/default-event.jpg');
+                return $event;
+            });
+
+            // Get attended events
+            $attendedEvents = Event::whereHas('attendees', function($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
+            ->with(['category', 'organizer'])
+            ->orderBy('start_time', 'desc')
+            ->get();
+
+            // Add image URL to attended events
+            $attendedEvents->transform(function ($event) {
+                $event->image_url = $event->image 
+                    ? asset('storage/' . $event->image) 
+                    : asset('images/default-event.jpg');
+                return $event;
+            });
 
             return response()->json([
+                'success' => true,
                 'organized_events' => $organizedEvents,
                 'attended_events' => $attendedEvents
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('My events error: ' . $e->getMessage());
+            Log::error('Error loading user events: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to load user events',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to load events'
             ], 500);
         }
     }
@@ -201,35 +242,86 @@ class ProfileController extends Controller
     {
         try {
             $request->validate([
-                'password' => 'required'
+                'password' => 'required',
             ]);
 
             $user = Auth::user();
 
+            // Verify password
             if (!Hash::check($request->password, $user->password)) {
                 return response()->json([
+                    'success' => false,
                     'message' => 'Password is incorrect'
                 ], 400);
             }
 
             // Delete profile picture if exists
             if ($user->profile_picture) {
-                Storage::delete('public/profile_pictures/' . $user->profile_picture);
+                Storage::disk('public')->delete($user->profile_picture);
             }
 
-            // Logout and delete user
-            Auth::logout();
+            // Delete user's event registrations
+            Attendee::where('user_id', $user->id)->delete();
+
+            // Note: We don't delete events organized by the user to maintain data integrity
+            // Instead, we could set organizer_id to null or transfer to admin
+
+            Log::info('User account deleted', [
+                'user_id' => $user->id,
+                'user_email' => $user->email
+            ]);
+
+            // Delete the user
             $user->delete();
 
             return response()->json([
+                'success' => true,
                 'message' => 'Account deleted successfully'
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Account deletion error: ' . $e->getMessage());
+            Log::error('Error deleting account: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to delete account',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to delete account'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get user statistics
+     */
+    public function getStats()
+    {
+        try {
+            $user = Auth::user();
+
+            $stats = [
+                'events_organized' => Event::where('organizer_id', $user->id)->count(),
+                'events_attended' => Attendee::where('user_id', $user->id)->count(),
+                'upcoming_events' => Event::whereHas('attendees', function($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                })->where('start_time', '>', now())->count(),
+                'interests_count' => count($user->interests ?? [])
+            ];
+
+            return response()->json([
+                'success' => true,
+                'stats' => $stats
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting user stats: ' . $e->getMessage(), [
+                'user_id' => Auth::id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load statistics'
             ], 500);
         }
     }

@@ -3,79 +3,111 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Models\Event;
 use App\Models\User;
+use App\Models\Event;
 use App\Models\Attendee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class MemberController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     /**
-     * Get member dashboard data
+     * Display the member dashboard
      */
     public function dashboard()
     {
         try {
             $user = Auth::user();
             
-            if (!$user) {
-                return response()->json([
-                    'message' => 'User not authenticated'
-                ], 401);
-            }
+            // Get user's registered events (upcoming only)
+            $registeredEvents = Event::whereHas('attendees', function($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
+            ->where('start_time', '>', Carbon::now())
+            ->with(['category', 'organizer'])
+            ->orderBy('start_time', 'asc')
+            ->get();
 
-            // Get upcoming events the user might be interested in
-            $upcomingEvents = Event::where('start_time', '>', now())
-                ->with(['organizer:id,name', 'category:id,name'])
-                ->orderBy('start_time')
-                ->limit(6)
-                ->get();
-
-            // Get user's registered events
-            $registeredEventIds = Attendee::where('user_id', $user->id)->pluck('event_id');
-            $registeredEvents = Event::whereIn('id', $registeredEventIds)
-                ->where('start_time', '>', now())
-                ->with(['organizer:id,name', 'category:id,name'])
-                ->orderBy('start_time')
-                ->limit(3)
-                ->get();
+            // Get user statistics
+            $stats = [
+                'total_events_attended' => Attendee::where('user_id', $user->id)->count(),
+                'upcoming_registrations' => $registeredEvents->count(),
+                'events_organized' => Event::where('organizer_id', $user->id)->count(),
+            ];
 
             // Get recommended events based on user interests
-            $recommendedEvents = $this->getRecommendedEventsForUser($user);
+            $recommendedEvents = $this->getRecommendedEvents($user);
 
-            // Get user's profile picture URL
-            $profilePictureUrl = $user->profile_picture ? 
-                asset('storage/profile_pictures/' . $user->profile_picture) : 
-                'https://ui-avatars.com/api/?name=' . urlencode($user->name) . 
-                '&background=' . substr(md5($user->id), 0, 6) . '&color=fff&size=200';
+            // Add profile picture URL
+            $user->profile_picture = $user->profile_picture 
+                ? asset('storage/' . $user->profile_picture) 
+                : asset('images/default-avatar.png');
 
             return response()->json([
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'profile_picture' => $profilePictureUrl,
-                    'events_attended' => $user->events_attended ?? 0,
-                    'interests' => $user->interests ?? [],
-                    'bio' => $user->bio
-                ],
-                'upcoming_events' => $upcomingEvents,
+                'success' => true,
+                'user' => $user,
                 'registered_events' => $registeredEvents,
                 'recommended_events' => $recommendedEvents,
-                'stats' => [
-                    'total_events_attended' => $user->events_attended ?? 0,
-                    'upcoming_registrations' => $registeredEvents->count()
-                ]
+                'stats' => $stats
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Dashboard loading error: ' . $e->getMessage());
+            Log::error('Dashboard loading error: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to load dashboard data',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to load dashboard data'
             ], 500);
+        }
+    }
+
+    /**
+     * Get recommended events for user based on interests
+     */
+    private function getRecommendedEvents($user)
+    {
+        try {
+            $userInterests = $user->interests ?? [];
+            
+            if (empty($userInterests)) {
+                // If no interests, return popular upcoming events
+                return Event::where('start_time', '>', Carbon::now())
+                    ->whereDoesntHave('attendees', function($query) use ($user) {
+                        $query->where('user_id', $user->id);
+                    })
+                    ->with(['category', 'organizer'])
+                    ->orderBy('created_at', 'desc')
+                    ->limit(5)
+                    ->get();
+            }
+
+            // Get events matching user interests
+            return Event::where('start_time', '>', Carbon::now())
+                ->whereHas('category', function($query) use ($userInterests) {
+                    $query->whereIn('name', $userInterests);
+                })
+                ->whereDoesntHave('attendees', function($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                })
+                ->with(['category', 'organizer'])
+                ->orderBy('start_time', 'asc')
+                ->limit(5)
+                ->get();
+
+        } catch (\Exception $e) {
+            Log::error('Error getting recommended events: ' . $e->getMessage());
+            return collect();
         }
     }
 
@@ -94,72 +126,71 @@ class MemberController extends Controller
             $user->interests = $request->interests;
             $user->save();
 
+            Log::info('User interests updated', [
+                'user_id' => $user->id,
+                'interests' => $request->interests
+            ]);
+
             return response()->json([
-                'message' => 'Interests updated successfully',
+                'success' => true,
+                'message' => 'Interests updated successfully!',
                 'interests' => $user->interests
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Update interests error: ' . $e->getMessage());
+            Log::error('Error updating interests: ' . $e->getMessage(), [
+                'user_id' => Auth::id(),
+                'request_data' => $request->all()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to update interests',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to update interests'
             ], 500);
         }
     }
 
     /**
-     * Get recommended events based on user interests
+     * Get member profile data
      */
-    private function getRecommendedEventsForUser(User $user)
-    {
-        try {
-            if (!$user->interests || empty($user->interests)) {
-                return Event::where('start_time', '>', now())
-                    ->with(['organizer:id,name', 'category:id,name'])
-                    ->orderBy('start_time')
-                    ->limit(3)
-                    ->get();
-            }
-
-            // Simple recommendation based on event type and description
-            return Event::where('start_time', '>', now())
-                ->where(function ($query) use ($user) {
-                    foreach ($user->interests as $interest) {
-                        $query->orWhere('event_type', 'like', "%{$interest}%")
-                              ->orWhere('description', 'like', "%{$interest}%")
-                              ->orWhere('name', 'like', "%{$interest}%");
-                    }
-                })
-                ->with(['organizer:id,name', 'category:id,name'])
-                ->orderBy('start_time')
-                ->limit(3)
-                ->get();
-
-        } catch (\Exception $e) {
-            \Log::error('Get recommended events error: ' . $e->getMessage());
-            return collect(); // Return empty collection on error
-        }
-    }
-
-    /**
-     * Get recommended events endpoint
-     */
-    public function getRecommendedEvents()
+    public function profile()
     {
         try {
             $user = Auth::user();
-            $recommendedEvents = $this->getRecommendedEventsForUser($user);
+            
+            // Add profile picture URL
+            $user->profile_picture = $user->profile_picture 
+                ? asset('storage/' . $user->profile_picture) 
+                : asset('images/default-avatar.png');
+
+            // Get user's events
+            $organizedEvents = Event::where('organizer_id', $user->id)
+                ->with('category')
+                ->orderBy('start_time', 'desc')
+                ->get();
+
+            $attendedEvents = Event::whereHas('attendees', function($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
+            ->with(['category', 'organizer'])
+            ->orderBy('start_time', 'desc')
+            ->get();
 
             return response()->json([
-                'recommended_events' => $recommendedEvents
+                'success' => true,
+                'user' => $user,
+                'organized_events' => $organizedEvents,
+                'attended_events' => $attendedEvents
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('Get recommended events endpoint error: ' . $e->getMessage());
+            Log::error('Error loading profile: ' . $e->getMessage(), [
+                'user_id' => Auth::id()
+            ]);
+
             return response()->json([
-                'message' => 'Failed to get recommended events',
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to load profile data'
             ], 500);
         }
     }

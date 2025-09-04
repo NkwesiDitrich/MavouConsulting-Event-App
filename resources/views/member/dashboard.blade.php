@@ -8,16 +8,14 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card bg-gradient-primary text-white">
-                <div class="card-body p-4">
+                <div class="card-body">
                     <div class="row align-items-center">
                         <div class="col-md-8">
-                            <h2 class="mb-2">Welcome back, <span id="userName">Member</span>!</h2>
-                            <p class="mb-0 opacity-75">Discover amazing events and connect with like-minded people</p>
+                            <h2 class="mb-2">Welcome back, <span id="userName">Loading...</span>!</h2>
+                            <p class="mb-0 opacity-75">Here's what's happening with your events</p>
                         </div>
                         <div class="col-md-4 text-md-end">
-                            <div class="d-flex justify-content-md-end justify-content-center">
-                                <img id="userAvatar" src="" alt="Profile" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">
-                            </div>
+                            <img id="userAvatar" src="" alt="Profile" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">
                         </div>
                     </div>
                 </div>
@@ -26,140 +24,165 @@
     </div>
 
     <!-- Stats Cards -->
-    <div class="row mb-4" id="statsCards">
-        <div class="col-md-4 mb-3">
-            <div class="card stats-card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-calendar-check fa-2x mb-3"></i>
-                    <h3 class="mb-1" id="totalEventsAttended">0</h3>
-                    <p class="mb-0">Events Attended</p>
+    <div class="row mb-4">
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card stats-card text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0" id="eventsAttended">0</h3>
+                            <p class="mb-0">Events Attended</p>
+                        </div>
+                        <i class="fas fa-calendar-check fa-2x opacity-75"></i>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4 mb-3">
-            <div class="card stats-card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-clock fa-2x mb-3"></i>
-                    <h3 class="mb-1" id="upcomingRegistrations">0</h3>
-                    <p class="mb-0">Upcoming Events</p>
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0" id="upcomingRegistrations">0</h3>
+                            <p class="mb-0">Upcoming Events</p>
+                        </div>
+                        <i class="fas fa-calendar-plus fa-2x opacity-75"></i>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4 mb-3">
-            <div class="card stats-card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-star fa-2x mb-3"></i>
-                    <h3 class="mb-1" id="recommendedCount">0</h3>
-                    <p class="mb-0">Recommended</p>
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0" id="interestsCount">0</h3>
+                            <p class="mb-0">Interests</p>
+                        </div>
+                        <i class="fas fa-heart fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3 mb-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="mb-0" id="recommendedCount">0</h3>
+                            <p class="mb-0">Recommended</p>
+                        </div>
+                        <i class="fas fa-star fa-2x opacity-75"></i>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            <!-- Registered Events -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-check me-2"></i>
+                        My Upcoming Events
+                    </h5>
+                    <a href="{{ route('events.browse') }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i>
+                        Find More Events
+                    </a>
+                </div>
                 <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-bolt text-warning me-2"></i>
+                    <div id="registeredEvents">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recommended Events -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-star me-2"></i>
+                        Recommended for You
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="recommendedEvents">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-lg-4">
+            <!-- Quick Actions -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bolt me-2"></i>
                         Quick Actions
                     </h5>
-                    <div class="row">
-                        <div class="col-md-3 mb-2">
-                            <a href="{{ route('events.browse') }}" class="btn btn-outline-primary w-100">
-                                <i class="fas fa-search me-2"></i>
-                                Browse Events
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-2">
-                            <button class="btn btn-outline-success w-100" onclick="updateInterests()">
-                                <i class="fas fa-heart me-2"></i>
-                                Update Interests
-                            </button>
-                        </div>
-                        <div class="col-md-3 mb-2">
-                            <a href="{{ route('profile.show') }}" class="btn btn-outline-info w-100">
-                                <i class="fas fa-user me-2"></i>
-                                Edit Profile
-                            </a>
-                        </div>
-                        <div class="col-md-3 mb-2">
-                            <button class="btn btn-outline-secondary w-100" onclick="createEvent()">
-                                <i class="fas fa-plus me-2"></i>
-                                Create Event
-                            </button>
-                        </div>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('events.browse') }}" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>
+                            Browse Events
+                        </a>
+                        <a href="{{ route('profile.show') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-user me-2"></i>
+                            Edit Profile
+                        </a>
+                        <button class="btn btn-outline-success" onclick="updateInterests()">
+                            <i class="fas fa-heart me-2"></i>
+                            Update Interests
+                        </button>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Main Content Tabs -->
-    <div class="row">
-        <div class="col-12">
-            <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="recommended-tab" data-bs-toggle="tab" data-bs-target="#recommended" type="button" role="tab">
-                        <i class="fas fa-star me-2"></i>
-                        Recommended Events
+            <!-- User Interests -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-heart me-2"></i>
+                        Your Interests
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="userInterests">
+                        <p class="text-muted">Loading...</p>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm w-100" onclick="updateInterests()">
+                        <i class="fas fa-edit me-1"></i>
+                        Update Interests
                     </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="registered-tab" data-bs-toggle="tab" data-bs-target="#registered" type="button" role="tab">
-                        <i class="fas fa-calendar-check me-2"></i>
-                        My Registered Events
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="upcoming-tab" data-bs-toggle="tab" data-bs-target="#upcoming" type="button" role="tab">
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
                         <i class="fas fa-clock me-2"></i>
-                        Upcoming Events
-                    </button>
-                </li>
-            </ul>
-
-            <div class="tab-content" id="dashboardTabsContent">
-                <!-- Recommended Events Tab -->
-                <div class="tab-pane fade show active" id="recommended" role="tabpanel">
-                    <div class="card">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5 class="mb-0">Events You Might Like</h5>
-                                <button class="btn btn-sm btn-outline-primary" onclick="refreshRecommendations()">
-                                    <i class="fas fa-refresh me-1"></i>
-                                    Refresh
-                                </button>
-                            </div>
-                            <div class="row" id="recommendedEvents">
-                                <!-- Recommended events will be loaded here -->
-                            </div>
-                        </div>
-                    </div>
+                        Recent Activity
+                    </h5>
                 </div>
-
-                <!-- Registered Events Tab -->
-                <div class="tab-pane fade" id="registered" role="tabpanel">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3">Your Registered Events</h5>
-                            <div class="row" id="registeredEvents">
-                                <!-- Registered events will be loaded here -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upcoming Events Tab -->
-                <div class="tab-pane fade" id="upcoming" role="tabpanel">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3">All Upcoming Events</h5>
-                            <div class="row" id="upcomingEvents">
-                                <!-- Upcoming events will be loaded here -->
-                            </div>
-                        </div>
+                <div class="card-body">
+                    <div id="recentActivity">
+                        <p class="text-muted">No recent activity</p>
                     </div>
                 </div>
             </div>
@@ -201,9 +224,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadDashboard() {
     try {
-        // Add cache-busting parameter to prevent cached responses
-        const cacheBuster = new Date().getTime();
-        const response = await axios.get(`/web-api/member/dashboard?t=${cacheBuster}`);
+        const response = await axios.get('/web-api/member/dashboard');
         dashboardData = response.data;
         
         // Update user info
@@ -211,132 +232,183 @@ async function loadDashboard() {
         document.getElementById('userAvatar').src = dashboardData.user.profile_picture;
         
         // Update stats
-        document.getElementById('totalEventsAttended').textContent = dashboardData.stats.total_events_attended;
+        document.getElementById('eventsAttended').textContent = dashboardData.stats.total_events_attended;
         document.getElementById('upcomingRegistrations').textContent = dashboardData.stats.upcoming_registrations;
+        document.getElementById('interestsCount').textContent = (dashboardData.user.interests || []).length;
         document.getElementById('recommendedCount').textContent = dashboardData.recommended_events.length;
         
-        // Store user interests
-        userInterests = dashboardData.user.interests || [];
+        // Display registered events
+        displayRegisteredEvents();
         
-        // Load events
-        loadRecommendedEvents();
-        loadRegisteredEvents();
-        loadUpcomingEvents();
+        // Display recommended events
+        displayRecommendedEvents();
+        
+        // Display user interests
+        displayUserInterests();
+        
+        userInterests = dashboardData.user.interests || [];
         
     } catch (error) {
         console.error('Error loading dashboard:', error);
         showAlert('Failed to load dashboard data', 'danger');
+        
+        // Show error state
+        document.getElementById('registeredEvents').innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-3"></i>
+                <p class="text-danger">Failed to load dashboard data</p>
+                <button class="btn btn-outline-primary" onclick="loadDashboard()">Try Again</button>
+            </div>
+        `;
     }
 }
 
-function loadRecommendedEvents() {
-    const container = document.getElementById('recommendedEvents');
-    container.innerHTML = '';
-    
-    if (dashboardData.recommended_events.length === 0) {
-        container.innerHTML = '<div class="col-12"><p class="text-muted text-center">No recommended events at the moment. Update your interests to get better recommendations!</p></div>';
-        return;
-    }
-    
-    dashboardData.recommended_events.forEach(event => {
-        container.appendChild(createEventCard(event, 'recommended'));
-    });
-}
-
-function loadRegisteredEvents() {
+function displayRegisteredEvents() {
     const container = document.getElementById('registeredEvents');
-    container.innerHTML = '';
     
-    if (dashboardData.registered_events.length === 0) {
-        container.innerHTML = '<div class="col-12"><p class="text-muted text-center">You haven\'t registered for any events yet. <a href="/events/browse">Browse events</a> to get started!</p></div>';
+    if (!dashboardData.registered_events || dashboardData.registered_events.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-calendar-times fa-2x text-muted mb-3"></i>
+                <h6 class="text-muted">No upcoming events</h6>
+                <p class="text-muted mb-3">You haven't registered for any upcoming events yet.</p>
+                <a href="{{ route('events.browse') }}" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>
+                    Browse Events
+                </a>
+            </div>
+        `;
         return;
     }
     
-    dashboardData.registered_events.forEach(event => {
-        container.appendChild(createEventCard(event, 'registered'));
-    });
-}
-
-function loadUpcomingEvents() {
-    const container = document.getElementById('upcomingEvents');
-    container.innerHTML = '';
-    
-    if (dashboardData.upcoming_events.length === 0) {
-        container.innerHTML = '<div class="col-12"><p class="text-muted text-center">No upcoming events available.</p></div>';
-        return;
-    }
-    
-    dashboardData.upcoming_events.forEach(event => {
-        container.appendChild(createEventCard(event, 'upcoming'));
-    });
-}
-
-function createEventCard(event, type) {
-    const col = document.createElement('div');
-    col.className = 'col-md-6 col-lg-4 mb-3';
-    
-    const isRegistered = type === 'registered';
-    const actionButton = isRegistered 
-        ? `<button class="btn btn-success btn-sm" onclick="viewEventDashboard(${event.id})">
-             <i class="fas fa-tachometer-alt me-1"></i>
-             View Dashboard
-           </button>`
-        : `<button class="btn btn-primary btn-sm" onclick="registerForEvent(${event.id})">
-             <i class="fas fa-calendar-plus me-1"></i>
-             Register
-           </button>`;
-    
-    col.innerHTML = `
-        <div class="card event-card h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                    <h6 class="card-title mb-0">${event.name}</h6>
-                    <span class="badge bg-primary">${event.category?.name || 'General'}</span>
+    container.innerHTML = dashboardData.registered_events.map(event => `
+        <div class="card mb-3 event-card">
+            <div class="row g-0">
+                <div class="col-md-4">
+                    <img src="${event.image_url || '/images/default-event.jpg'}" class="img-fluid rounded-start h-100" alt="${event.name}" style="object-fit: cover;">
                 </div>
-                <p class="card-text text-muted small mb-2">${event.description?.substring(0, 100) || ''}${event.description?.length > 100 ? '...' : ''}</p>
-                <div class="mb-2">
-                    <small class="text-muted">
-                        <i class="fas fa-calendar me-1"></i>
-                        ${formatDate(event.start_time)}
-                    </small>
-                </div>
-                <div class="mb-2">
-                    <small class="text-muted">
-                        <i class="fas fa-map-marker-alt me-1"></i>
-                        ${event.location || 'Online'}
-                    </small>
-                </div>
-                <div class="mb-2">
-                    <small class="text-muted">
-                        <i class="fas fa-user me-1"></i>
-                        by ${event.organizer?.name || 'Unknown'}
-                    </small>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    ${actionButton}
-                    <button class="btn btn-outline-secondary btn-sm" onclick="viewEventDetails(${event.id})">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Details
-                    </button>
+                <div class="col-md-8">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-0">${event.name}</h6>
+                            <span class="badge bg-primary">${event.category?.name || 'General'}</span>
+                        </div>
+                        <p class="card-text text-muted small">${event.description?.substring(0, 100) || ''}${event.description?.length > 100 ? '...' : ''}</p>
+                        <div class="mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-calendar me-1"></i>
+                                ${formatDate(event.start_time)}
+                            </small>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                ${event.location || 'Online'}
+                            </small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fas fa-user me-1"></i>
+                                by ${event.organizer?.name || 'Unknown'}
+                            </small>
+                            <button class="btn btn-outline-primary btn-sm" onclick="viewEventDetails(${event.id})">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Details
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    `;
+    `).join('');
+}
+
+function displayRecommendedEvents() {
+    const container = document.getElementById('recommendedEvents');
     
-    return col;
+    if (!dashboardData.recommended_events || dashboardData.recommended_events.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-star fa-2x text-muted mb-3"></i>
+                <h6 class="text-muted">No recommendations yet</h6>
+                <p class="text-muted mb-3">Update your interests to get personalized event recommendations.</p>
+                <button class="btn btn-primary" onclick="updateInterests()">
+                    <i class="fas fa-heart me-1"></i>
+                    Set Interests
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = dashboardData.recommended_events.map(event => `
+        <div class="card mb-3 event-card">
+            <div class="row g-0">
+                <div class="col-md-4">
+                    <img src="${event.image_url || '/images/default-event.jpg'}" class="img-fluid rounded-start h-100" alt="${event.name}" style="object-fit: cover;">
+                </div>
+                <div class="col-md-8">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-0">${event.name}</h6>
+                            <span class="badge bg-warning">Recommended</span>
+                        </div>
+                        <p class="card-text text-muted small">${event.description?.substring(0, 100) || ''}${event.description?.length > 100 ? '...' : ''}</p>
+                        <div class="mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-calendar me-1"></i>
+                                ${formatDate(event.start_time)}
+                            </small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                ${event.location || 'Online'}
+                            </small>
+                            <div>
+                                <button class="btn btn-outline-primary btn-sm me-2" onclick="viewEventDetails(${event.id})">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Details
+                                </button>
+                                <button class="btn btn-primary btn-sm" onclick="registerForEvent(${event.id})">
+                                    <i class="fas fa-calendar-plus me-1"></i>
+                                    Register
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function displayUserInterests() {
+    const container = document.getElementById('userInterests');
+    const interests = dashboardData.user.interests || [];
+    
+    if (interests.length === 0) {
+        container.innerHTML = '<p class="text-muted">No interests selected yet</p>';
+        return;
+    }
+    
+    container.innerHTML = interests.map(interest => 
+        `<span class="badge bg-primary me-1 mb-1">${interest}</span>`
+    ).join('');
 }
 
 function updateInterests() {
     // Load interests form
     const form = document.getElementById('interestsForm');
-    const interests = [
+    const availableInterests = [
         'Technology', 'Business', 'Networking', 'Education', 
         'Arts & Culture', 'Sports', 'Health & Wellness', 'Food & Drink',
-        'Music', 'Photography', 'Travel', 'Science'
+        'Music', 'Photography', 'Travel', 'Science', 'Marketing',
+        'Design', 'Finance', 'Entrepreneurship'
     ];
     
     form.innerHTML = '';
-    interests.forEach((interest, index) => {
+    availableInterests.forEach((interest, index) => {
         const col = document.createElement('div');
         col.className = 'col-md-6 mb-2';
         
@@ -375,8 +447,10 @@ async function saveInterests() {
         const modal = bootstrap.Modal.getInstance(document.getElementById('interestsModal'));
         modal.hide();
         
-        // Refresh recommendations
-        refreshRecommendations();
+        // Reload dashboard to get new recommendations
+        setTimeout(() => {
+            loadDashboard();
+        }, 1000);
         
     } catch (error) {
         console.error('Error updating interests:', error);
@@ -384,17 +458,38 @@ async function saveInterests() {
     }
 }
 
-async function refreshRecommendations() {
+async function viewEventDetails(eventId) {
     try {
-        const response = await axios.get('/web-api/member/recommended-events');
-        dashboardData.recommended_events = response.data.recommended_events;
+        const response = await axios.get(`/web-api/events/${eventId}`);
+        const eventData = response.data;
         
-        document.getElementById('recommendedCount').textContent = dashboardData.recommended_events.length;
-        loadRecommendedEvents();
+        // You can implement a modal or redirect to event details page
+        window.location.href = `/events/${eventId}`;
         
-        showAlert('Recommendations refreshed!', 'success');
     } catch (error) {
-        console.error('Error refreshing recommendations:', error);
-        showAlert('Failed to refresh recommendations', 'danger');
+        console.error('Error loading event details:', error);
+        showAlert('Failed to load event details', 'danger');
     }
 }
+
+async function registerForEvent(eventId) {
+    try {
+        const response = await axios.post(`/web-api/events/${eventId}/register`);
+        showAlert(response.data.message, 'success');
+        
+        // Reload dashboard to update registered events
+        setTimeout(() => {
+            loadDashboard();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Error registering for event:', error);
+        if (error.response && error.response.status === 401) {
+            showAlert('Please login to register for events', 'warning');
+        } else {
+            showAlert(error.response?.data?.message || 'Failed to register for event', 'danger');
+        }
+    }
+}
+</script>
+@endpush

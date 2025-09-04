@@ -10,7 +10,7 @@ class Category extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'description', 'color'];
 
     /**
      * Get the events for this category
@@ -18,5 +18,13 @@ class Category extends Model
     public function events(): HasMany
     {
         return $this->hasMany(Event::class);
+    }
+
+    /**
+     * Get events count for this category
+     */
+    public function getEventsCountAttribute()
+    {
+        return $this->events()->count();
     }
 }

@@ -57,7 +57,10 @@ class User extends Authenticatable
         ];
     }
 
-     public function updateProfile(array $data): bool
+    /**
+     * Update user profile
+     */
+    public function updateProfile(array $data): bool
     {
         // Remove password confirmation if present
         unset($data['password_confirmation']);
@@ -76,12 +79,10 @@ class User extends Authenticatable
     public function deleteAccount(): bool
     {
         // Delete user's events first to avoid foreign key constraints
-        if (method_exists($this, 'getEvents')) {
-            $this->getEvents()->delete();
-        }
+        $this->organizedEvents()->delete();
         
         // Delete from event attendees
-        DB::table('event_attendees')->where('user_id', $this->id)->delete();
+        DB::table('attendees')->where('user_id', $this->id)->delete();
         
         // Delete user's API tokens
         $this->tokens()->delete();
@@ -92,34 +93,27 @@ class User extends Authenticatable
     /**
      * Get events organized by this user
      */
-    /* public function getEvents()
+    public function organizedEvents()
     {
-        return $this->hasMany(Event::class);
-    } */
+        return $this->hasMany(Event::class, 'organizer_id');
+    }
 
     /**
      * Get events that the user is attending
      */
-    public function getAttendances()
-    {
-        return $this->belongsToMany(Event::class, 'attendees')
-                    ->withTimestamps();
-    }
-
-    /**
-     * Relationship alias for getAttendances
-     */
     public function attendingEvents()
     {
-        return $this->getAttendances();
+        return $this->belongsToMany(Event::class, 'attendees', 'user_id', 'event_id')
+                    ->withTimestamps()
+                    ->withPivot('checked_in');
     }
 
     /**
-     * Get events organized by this user (using organizer_id)
+     * Alias for attendingEvents
      */
-    public function organizedEvents()
+    public function getAttendances()
     {
-        return $this->hasMany(Event::class, 'organizer_id');
+        return $this->attendingEvents();
     }
 
     /**
@@ -127,7 +121,7 @@ class User extends Authenticatable
      */
     public function getEventsAttendedCount(): int
     {
-        return $this->events_attended;
+        return $this->events_attended ?? $this->attendingEvents()->count();
     }
 
     /**
@@ -135,34 +129,62 @@ class User extends Authenticatable
      */
     public function updateEventsAttendedCount(): void
     {
-        $this->events_attended = $this->getAttendances()->count();
+        $this->events_attended = $this->attendingEvents()->count();
         $this->save();
     }
 
     /**
      * Get profile picture URL or default avatar
      */
-public function getProfilePictureUrlAttribute(): string
-{
-    if ($this->profile_picture) {
-        return asset('storage/profile_pictures/' . $this->profile_picture);
+    public function getProfilePictureUrlAttribute(): string
+    {
+        if ($this->profile_picture) {
+            return asset('storage/profile_pictures/' . $this->profile_picture);
+        }
+        
+        // Generate unique avatar based on user ID to prevent duplicates
+        return 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . 
+               '&background=' . substr(md5($this->id), 0, 6) . '&color=fff&size=200';
     }
-    
-    // Generate unique avatar based on user ID to prevent duplicates
-    return 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . '&background=' . substr(md5($this->id), 0, 6) . '&color=fff&size=200';
-}
 
     /**
-     * Check if user is an organizer
+     * Check if user is globally an organizer (has created events)
      */
     public function isOrganizer(): bool
     {
-        return $this->role === 'organizer';
+        return $this->organizedEvents()->exists();
     }
 
+    /**
+     * Check if user is organizer for a specific event
+     */
     public function isEventOrganizer(Event $event): bool
     {
         return $event->organizer_id === $this->id;
+    }
+
+    /**
+     * Check if user is attendee for a specific event
+     */
+    public function isEventAttendee(Event $event): bool
+    {
+        return $this->attendingEvents()->where('event_id', $event->id)->exists();
+    }
+
+    /**
+     * Get user's role for a specific event
+     */
+    public function getEventRole(Event $event): string
+    {
+        if ($this->isEventOrganizer($event)) {
+            return 'organizer';
+        }
+        
+        if ($this->isEventAttendee($event)) {
+            return 'attendee';
+        }
+        
+        return 'member'; // Default global role
     }
 
     /**
@@ -174,7 +196,7 @@ public function getProfilePictureUrlAttribute(): string
     }
 
     /**
-     * Check if user is a member
+     * Check if user is a member (global role)
      */
     public function isMember(): bool
     {
@@ -182,11 +204,24 @@ public function getProfilePictureUrlAttribute(): string
     }
 
     /**
-     * Check if user can view attendee filters (admin or organizer only)
+     * Check if user can view attendee filters (admin or event organizer only)
      */
     public function canViewAttendeeFilters(): bool
     {
-        return in_array($this->role, ['admin', 'organizer']);
+        return $this->role === 'admin' || $this->organizedEvents()->exists();
     }
 
+    /**
+     * Boot method to set default role
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        
+        static::creating(function ($user) {
+            if (!$user->role) {
+                $user->role = 'member'; // Default role is always member
+            }
+        });
+    }
 }

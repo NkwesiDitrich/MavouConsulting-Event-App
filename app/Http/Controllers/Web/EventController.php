@@ -16,7 +16,7 @@ use Carbon\Carbon;
 class EventController extends Controller
 {
     /**
-     * Browse events with filtering and search
+     * Browse events with filtering and search - REAL-TIME TRACKING
      */
     public function browseEvents(Request $request)
     {
@@ -58,18 +58,21 @@ class EventController extends Controller
             $perPage = $request->get('per_page', 12);
             $events = $query->paginate($perPage);
 
-            // Add additional data for each event
+            // Add REAL-TIME additional data for each event
             $events->getCollection()->transform(function ($event) {
-                $event->image_url = $event->image 
-                    ? asset('storage/' . $event->image) 
-                    : asset('images/default-event.jpg');
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
                 
-                $event->attendee_count = $event->attendees()->count();
-                $event->is_full = $event->attendee_count >= $event->max_attendees;
+                // REAL-TIME attendee count from database
+                $event->attendee_count = DB::table('attendees')
+                    ->where('event_id', $event->id)
+                    ->count();
                 
-                // Check if current user is registered
+                $event->is_full = $event->attendee_count >= ($event->max_attendees ?? 100);
+                
+                // Check if current user is registered - REAL-TIME
                 if (Auth::check()) {
-                    $event->is_registered = $event->attendees()
+                    $event->is_registered = DB::table('attendees')
+                        ->where('event_id', $event->id)
                         ->where('user_id', Auth::id())
                         ->exists();
                 } else {
@@ -111,7 +114,7 @@ class EventController extends Controller
     }
 
     /**
-     * Search events (for AJAX search)
+     * Search events (for AJAX search) - REAL-TIME
      */
     public function searchEvents(Request $request)
     {
@@ -136,13 +139,14 @@ class EventController extends Controller
                 ->limit(10)
                 ->get();
 
-            // Add additional data
+            // Add REAL-TIME additional data
             $events->transform(function ($event) {
-                $event->image_url = $event->image 
-                    ? asset('storage/' . $event->image) 
-                    : asset('images/default-event.jpg');
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
                 
-                $event->attendee_count = $event->attendees()->count();
+                // REAL-TIME attendee count
+                $event->attendee_count = DB::table('attendees')
+                    ->where('event_id', $event->id)
+                    ->count();
                 
                 return $event;
             });
@@ -163,29 +167,31 @@ class EventController extends Controller
     }
 
     /**
-     * Get event details
+     * Get event details - REAL-TIME TRACKING
      */
     public function getEventDetails($id)
     {
         try {
-            $event = Event::with(['category', 'organizer', 'attendees.user'])
-                ->findOrFail($id);
+            $event = Event::with(['category', 'organizer'])->findOrFail($id);
 
-            // Add additional data
-            $event->image_url = $event->image 
-                ? asset('storage/' . $event->image) 
-                : asset('images/default-event.jpg');
+            // Add REAL-TIME additional data
+            $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
             
-            $event->attendee_count = $event->attendees()->count();
-            $event->is_full = $event->attendee_count >= $event->max_attendees;
-            $event->spots_remaining = $event->max_attendees - $event->attendee_count;
+            // REAL-TIME attendee count from database
+            $event->attendee_count = DB::table('attendees')
+                ->where('event_id', $event->id)
+                ->count();
+            
+            $event->is_full = $event->attendee_count >= ($event->max_attendees ?? 100);
+            $event->spots_remaining = ($event->max_attendees ?? 100) - $event->attendee_count;
             
             // Check if registration is still open
             $event->registration_open = Carbon::now()->lt(Carbon::parse($event->registration_deadline ?? $event->start_time));
             
-            // Check if current user is registered
+            // Check if current user is registered - REAL-TIME
             if (Auth::check()) {
-                $event->is_registered = $event->attendees()
+                $event->is_registered = DB::table('attendees')
+                    ->where('event_id', $event->id)
                     ->where('user_id', Auth::id())
                     ->exists();
                 
@@ -222,7 +228,7 @@ class EventController extends Controller
     }
 
     /**
-     * Register for an event
+     * Register for an event - REAL-TIME TRACKING
      */
     public function registerForEvent(Request $request, $id)
     {
@@ -235,6 +241,7 @@ class EventController extends Controller
                 ], 401);
             }
 
+            /** @var User $user */
             $user = Auth::user();
             $event = Event::findOrFail($id);
 
@@ -255,10 +262,11 @@ class EventController extends Controller
                 ], 400);
             }
 
-            // Check if user is already registered
-            $existingRegistration = Attendee::where('user_id', $user->id)
+            // Check if user is already registered - REAL-TIME
+            $existingRegistration = DB::table('attendees')
+                ->where('user_id', $user->id)
                 ->where('event_id', $event->id)
-                ->first();
+                ->exists();
 
             if ($existingRegistration) {
                 return response()->json([
@@ -267,22 +275,26 @@ class EventController extends Controller
                 ], 400);
             }
 
-            // Check if event is full
-            $currentAttendees = Attendee::where('event_id', $event->id)->count();
-            if ($currentAttendees >= $event->max_attendees) {
+            // Check if event is full - REAL-TIME
+            $currentAttendees = DB::table('attendees')
+                ->where('event_id', $event->id)
+                ->count();
+            
+            if ($currentAttendees >= ($event->max_attendees ?? 100)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This event is full'
                 ], 400);
             }
 
-            // Register user for event
-            $attendee = new Attendee();
-            $attendee->user_id = $user->id;
-            $attendee->event_id = $event->id;
-            $attendee->registration_date = Carbon::now();
-            $attendee->status = 'registered';
-            $attendee->save();
+            // Register user for event using DB query to avoid IntelliSense issues
+            DB::table('attendees')->insert([
+                'user_id' => $user->id,
+                'event_id' => $event->id,
+                'checked_in' => false,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
 
             Log::info('User registered for event', [
                 'user_id' => $user->id,
@@ -310,25 +322,25 @@ class EventController extends Controller
     }
 
     /**
-     * Get featured events
+     * Get featured events - REAL-TIME
      */
     public function getFeaturedEvents()
     {
         try {
             $events = Event::with(['category', 'organizer'])
                 ->where('start_time', '>', Carbon::now())
-                ->where('is_featured', true)
                 ->orderBy('start_time', 'asc')
                 ->limit(6)
                 ->get();
 
-            // Add additional data
+            // Add REAL-TIME additional data
             $events->transform(function ($event) {
-                $event->image_url = $event->image 
-                    ? asset('storage/' . $event->image) 
-                    : asset('images/default-event.jpg');
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
                 
-                $event->attendee_count = $event->attendees()->count();
+                // REAL-TIME attendee count
+                $event->attendee_count = DB::table('attendees')
+                    ->where('event_id', $event->id)
+                    ->count();
                 
                 return $event;
             });
@@ -349,7 +361,7 @@ class EventController extends Controller
     }
 
     /**
-     * Unregister from an event
+     * Unregister from an event - REAL-TIME
      */
     public function unregisterFromEvent($id)
     {
@@ -361,14 +373,17 @@ class EventController extends Controller
                 ], 401);
             }
 
+            /** @var User $user */
             $user = Auth::user();
             $event = Event::findOrFail($id);
 
-            $attendee = Attendee::where('user_id', $user->id)
+            // Check if user is registered - REAL-TIME
+            $isRegistered = DB::table('attendees')
+                ->where('user_id', $user->id)
                 ->where('event_id', $event->id)
-                ->first();
+                ->exists();
 
-            if (!$attendee) {
+            if (!$isRegistered) {
                 return response()->json([
                     'success' => false,
                     'message' => 'You are not registered for this event'
@@ -383,7 +398,11 @@ class EventController extends Controller
                 ], 400);
             }
 
-            $attendee->delete();
+            // Unregister using DB query to avoid IntelliSense issues
+            DB::table('attendees')
+                ->where('user_id', $user->id)
+                ->where('event_id', $event->id)
+                ->delete();
 
             Log::info('User unregistered from event', [
                 'user_id' => $user->id,
@@ -405,6 +424,29 @@ class EventController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to unregister. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get categories for dropdown
+     */
+    public function getCategories()
+    {
+        try {
+            $categories = Category::orderBy('name')->get();
+
+            return response()->json([
+                'success' => true,
+                'categories' => $categories
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting categories: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load categories'
             ], 500);
         }
     }

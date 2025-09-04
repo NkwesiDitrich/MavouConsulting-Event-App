@@ -22,7 +22,7 @@ class ProfileController extends Controller
     }
 
     /**
-     * Show user profile
+     * Show user profile - REAL-TIME TRACKING
      */
     public function show()
     {
@@ -30,24 +30,48 @@ class ProfileController extends Controller
             /** @var User $user */
             $user = Auth::user();
             
+            // Get fresh user data from database
+            $freshUser = DB::table('users')->where('id', $user->id)->first();
+            
             // Add profile picture URL
             $user->profile_picture = $user->profile_picture 
                 ? asset('storage/' . $user->profile_picture) 
                 : asset('images/default-avatar.png');
 
-            // Get user's organized events
+            // Get user's organized events - REAL-TIME
             $organizedEvents = Event::where('organizer_id', $user->id)
                 ->with('category')
                 ->orderBy('start_time', 'desc')
                 ->get();
 
-            // Get user's attended events
-            $attendedEvents = Event::whereHas('attendees', function($query) use ($user) {
-                $query->where('user_id', $user->id);
+            // Add real-time attendee counts to organized events
+            $organizedEvents->transform(function ($event) {
+                $event->attendee_count = DB::table('attendees')
+                    ->where('event_id', $event->id)
+                    ->count();
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
+                return $event;
+            });
+
+            // Get user's attended events - REAL-TIME
+            $attendedEvents = Event::whereExists(function($query) use ($user) {
+                $query->select(DB::raw(1))
+                      ->from('attendees')
+                      ->whereRaw('attendees.event_id = events.id')
+                      ->where('attendees.user_id', $user->id);
             })
             ->with(['category', 'organizer'])
             ->orderBy('start_time', 'desc')
             ->get();
+
+            // Add image URLs to attended events
+            $attendedEvents->transform(function ($event) {
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
+                return $event;
+            });
+
+            // Add fresh interests from database
+            $user->interests = $freshUser->interests ? json_decode($freshUser->interests, true) : [];
 
             return response()->json([
                 'success' => true,
@@ -70,7 +94,7 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update user profile
+     * Update user profile - FIXED IntelliSense errors
      */
     public function update(Request $request)
     {
@@ -100,7 +124,7 @@ class ProfileController extends Controller
             }
 
             // Update user data using DB query to avoid IntelliSense issues
-            DB::table('users')
+            $updated = DB::table('users')
                 ->where('id', $user->id)
                 ->update([
                     'name' => $validatedData['name'],
@@ -112,13 +136,26 @@ class ProfileController extends Controller
                     'updated_at' => now()
                 ]);
 
-            // Refresh user model
-            $user->refresh();
+            if (!$updated) {
+                throw new \Exception('Failed to update profile in database');
+            }
+
+            // Get fresh user data
+            $freshUser = DB::table('users')->where('id', $user->id)->first();
 
             // Add profile picture URL for response
-            $user->profile_picture = $user->profile_picture 
-                ? asset('storage/' . $user->profile_picture) 
-                : asset('images/default-avatar.png');
+            $responseUser = (object) [
+                'id' => $freshUser->id,
+                'name' => $freshUser->name,
+                'email' => $freshUser->email,
+                'bio' => $freshUser->bio,
+                'linkedin_url' => $freshUser->linkedin_url,
+                'twitter_url' => $freshUser->twitter_url,
+                'profile_picture' => $freshUser->profile_picture 
+                    ? asset('storage/' . $freshUser->profile_picture) 
+                    : asset('images/default-avatar.png'),
+                'interests' => $freshUser->interests ? json_decode($freshUser->interests, true) : []
+            ];
 
             Log::info('User profile updated', [
                 'user_id' => $user->id,
@@ -128,7 +165,7 @@ class ProfileController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully!',
-                'user' => $user
+                'user' => $responseUser
             ]);
 
         } catch (\Exception $e) {
@@ -146,7 +183,7 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update user password
+     * Update user password - FIXED IntelliSense errors
      */
     public function updatePassword(Request $request)
     {
@@ -168,12 +205,16 @@ class ProfileController extends Controller
             }
 
             // Update password using DB query to avoid IntelliSense issues
-            DB::table('users')
+            $updated = DB::table('users')
                 ->where('id', $user->id)
                 ->update([
                     'password' => Hash::make($request->password),
                     'updated_at' => now()
                 ]);
+
+            if (!$updated) {
+                throw new \Exception('Failed to update password in database');
+            }
 
             Log::info('User password updated', [
                 'user_id' => $user->id
@@ -198,7 +239,7 @@ class ProfileController extends Controller
     }
 
     /**
-     * Get user's events (organized and attended)
+     * Get user's events (organized and attended) - REAL-TIME
      */
     public function myEvents()
     {
@@ -206,24 +247,27 @@ class ProfileController extends Controller
             /** @var User $user */
             $user = Auth::user();
 
-            // Get organized events
+            // Get organized events - REAL-TIME
             $organizedEvents = Event::where('organizer_id', $user->id)
-                ->with(['category', 'attendees'])
+                ->with(['category'])
                 ->orderBy('start_time', 'desc')
                 ->get();
 
-            // Add attendee count to organized events
+            // Add REAL-TIME attendee count to organized events
             $organizedEvents->transform(function ($event) {
-                $event->attendee_count = $event->attendees->count();
-                $event->image_url = $event->image 
-                    ? asset('storage/' . $event->image) 
-                    : asset('images/default-event.jpg');
+                $event->attendee_count = DB::table('attendees')
+                    ->where('event_id', $event->id)
+                    ->count();
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
                 return $event;
             });
 
-            // Get attended events
-            $attendedEvents = Event::whereHas('attendees', function($query) use ($user) {
-                $query->where('user_id', $user->id);
+            // Get attended events - REAL-TIME
+            $attendedEvents = Event::whereExists(function($query) use ($user) {
+                $query->select(DB::raw(1))
+                      ->from('attendees')
+                      ->whereRaw('attendees.event_id = events.id')
+                      ->where('attendees.user_id', $user->id);
             })
             ->with(['category', 'organizer'])
             ->orderBy('start_time', 'desc')
@@ -231,9 +275,7 @@ class ProfileController extends Controller
 
             // Add image URL to attended events
             $attendedEvents->transform(function ($event) {
-                $event->image_url = $event->image 
-                    ? asset('storage/' . $event->image) 
-                    : asset('images/default-event.jpg');
+                $event->image_url = $event->image_url ?: asset('images/default-event.jpg');
                 return $event;
             });
 
@@ -257,7 +299,7 @@ class ProfileController extends Controller
     }
 
     /**
-     * Delete user account
+     * Delete user account - FIXED IntelliSense errors
      */
     public function destroy(Request $request)
     {
@@ -285,13 +327,20 @@ class ProfileController extends Controller
             // Delete user's event registrations using DB query
             DB::table('attendees')->where('user_id', $user->id)->delete();
 
+            // Delete user's organized events (cascade will handle attendees)
+            DB::table('events')->where('organizer_id', $user->id)->delete();
+
             Log::info('User account deleted', [
                 'user_id' => $user->id,
                 'user_email' => $user->email
             ]);
 
             // Delete the user using DB query to avoid IntelliSense issues
-            DB::table('users')->where('id', $user->id)->delete();
+            $deleted = DB::table('users')->where('id', $user->id)->delete();
+
+            if (!$deleted) {
+                throw new \Exception('Failed to delete user from database');
+            }
 
             return response()->json([
                 'success' => true,
@@ -312,7 +361,7 @@ class ProfileController extends Controller
     }
 
     /**
-     * Get user statistics
+     * Get user statistics - REAL-TIME
      */
     public function getStats()
     {
@@ -320,13 +369,23 @@ class ProfileController extends Controller
             /** @var User $user */
             $user = Auth::user();
 
+            // Get fresh user data
+            $freshUser = DB::table('users')->where('id', $user->id)->first();
+
+            // REAL-TIME statistics from database
             $stats = [
-                'events_organized' => Event::where('organizer_id', $user->id)->count(),
-                'events_attended' => Attendee::where('user_id', $user->id)->count(),
-                'upcoming_events' => Event::whereHas('attendees', function($query) use ($user) {
-                    $query->where('user_id', $user->id);
-                })->where('start_time', '>', now())->count(),
-                'interests_count' => count($user->interests ?? [])
+                'events_organized' => DB::table('events')
+                    ->where('organizer_id', $user->id)
+                    ->count(),
+                'events_attended' => DB::table('attendees')
+                    ->where('user_id', $user->id)
+                    ->count(),
+                'upcoming_events' => DB::table('events')
+                    ->join('attendees', 'events.id', '=', 'attendees.event_id')
+                    ->where('attendees.user_id', $user->id)
+                    ->where('events.start_time', '>', now())
+                    ->count(),
+                'interests_count' => count($freshUser->interests ? json_decode($freshUser->interests, true) : [])
             ];
 
             return response()->json([

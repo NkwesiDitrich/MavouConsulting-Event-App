@@ -190,6 +190,33 @@
     </div>
 </div>
 
+<!-- Event Details Modal -->
+<div class="modal fade" id="eventDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Event Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="eventDetailsContent">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div id="eventDetailsActions">
+                    <!-- Action buttons will be added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Interests Modal -->
 <div class="modal fade" id="interestsModal" tabindex="-1">
     <div class="modal-dialog">
@@ -231,7 +258,7 @@ async function loadDashboard() {
         document.getElementById('userName').textContent = dashboardData.user.name;
         document.getElementById('userAvatar').src = dashboardData.user.profile_picture;
         
-        // Update stats
+        // Update stats with REAL-TIME data
         document.getElementById('eventsAttended').textContent = dashboardData.stats.total_events_attended;
         document.getElementById('upcomingRegistrations').textContent = dashboardData.stats.upcoming_registrations;
         document.getElementById('interestsCount').textContent = (dashboardData.user.interests || []).length;
@@ -441,7 +468,7 @@ async function saveInterests() {
         });
         
         userInterests = selectedInterests;
-        showAlert('Interests updated successfully!', 'success');
+        showAlert(response.data.message, 'success');
         
         // Close modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('interestsModal'));
@@ -460,15 +487,82 @@ async function saveInterests() {
 
 async function viewEventDetails(eventId) {
     try {
-        const response = await axios.get(`/web-api/events/${eventId}`);
-        const eventData = response.data;
+        // Show loading in modal
+        document.getElementById('eventDetailsContent').innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
         
-        // You can implement a modal or redirect to event details page
-        window.location.href = `/events/${eventId}`;
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
+        modal.show();
+        
+        // Load event details
+        const response = await axios.get(`/web-api/member/event-details/${eventId}`);
+        const eventData = response.data.event;
+        
+        // Display event details
+        document.getElementById('eventDetailsContent').innerHTML = `
+            <div class="row">
+                <div class="col-md-4">
+                    <img src="${eventData.image_url}" class="img-fluid rounded" alt="${eventData.name}">
+                </div>
+                <div class="col-md-8">
+                    <h4>${eventData.name}</h4>
+                    ${eventData.slogan ? `<p class="text-muted fst-italic">"${eventData.slogan}"</p>` : ''}
+                    <p><strong>Description:</strong> ${eventData.description || 'No description available'}</p>
+                    
+                    <div class="row mb-3">
+                        <div class="col-sm-6">
+                            <p><strong>Location:</strong> ${eventData.location}</p>
+                            <p><strong>Category:</strong> ${eventData.category}</p>
+                            <p><strong>Event Type:</strong> ${eventData.event_type}</p>
+                        </div>
+                        <div class="col-sm-6">
+                            <p><strong>Audience:</strong> ${eventData.audience}</p>
+                            <p><strong>Organizer:</strong> ${eventData.organizer_name}</p>
+                            <p><strong>Attendees:</strong> ${eventData.attendee_count}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <p><strong>Start Time:</strong><br>${formatDateTime(eventData.start_time)}</p>
+                        </div>
+                        <div class="col-sm-6">
+                            <p><strong>End Time:</strong><br>${formatDateTime(eventData.end_time)}</p>
+                        </div>
+                    </div>
+                    
+                    ${eventData.is_registered ? '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>You are registered for this event</div>' : ''}
+                    ${eventData.is_organizer ? '<div class="alert alert-info"><i class="fas fa-crown me-2"></i>You are the organizer of this event</div>' : ''}
+                </div>
+            </div>
+        `;
+        
+        // Update action buttons
+        let actionButtons = '';
+        if (eventData.is_organizer) {
+            actionButtons = `<button type="button" class="btn btn-warning">Manage Event</button>`;
+        } else if (eventData.is_registered) {
+            actionButtons = `<button type="button" class="btn btn-danger" onclick="unregisterFromEvent(${eventData.id})">Unregister</button>`;
+        } else {
+            actionButtons = `<button type="button" class="btn btn-primary" onclick="registerForEvent(${eventData.id})">Register</button>`;
+        }
+        
+        document.getElementById('eventDetailsActions').innerHTML = actionButtons;
         
     } catch (error) {
         console.error('Error loading event details:', error);
-        showAlert('Failed to load event details', 'danger');
+        document.getElementById('eventDetailsContent').innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-3"></i>
+                <p class="text-danger">Failed to load event details</p>
+            </div>
+        `;
     }
 }
 
@@ -476,6 +570,10 @@ async function registerForEvent(eventId) {
     try {
         const response = await axios.post(`/web-api/events/${eventId}/register`);
         showAlert(response.data.message, 'success');
+        
+        // Close modal if open
+        const modal = bootstrap.Modal.getInstance(document.getElementById('eventDetailsModal'));
+        if (modal) modal.hide();
         
         // Reload dashboard to update registered events
         setTimeout(() => {
@@ -490,6 +588,49 @@ async function registerForEvent(eventId) {
             showAlert(error.response?.data?.message || 'Failed to register for event', 'danger');
         }
     }
+}
+
+// Utility functions
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
+function formatDateTime(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function showAlert(message, type) {
+    // Create alert element
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
 }
 </script>
 @endpush

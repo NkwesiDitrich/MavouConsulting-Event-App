@@ -203,7 +203,7 @@ async function loadDashboard() {
     try {
         // Add cache-busting parameter to prevent cached responses
         const cacheBuster = new Date().getTime();
-        const response = await axios.get(`/api/member/dashboard?t=${cacheBuster}`);
+        const response = await axios.get(`/web-api/member/dashboard?t=${cacheBuster}`);
         dashboardData = response.data;
         
         // Update user info
@@ -364,7 +364,7 @@ async function saveInterests() {
     });
     
     try {
-        const response = await axios.put('/api/member/interests', {
+        const response = await axios.put('/web-api/member/interests', {
             interests: selectedInterests
         });
         
@@ -386,7 +386,7 @@ async function saveInterests() {
 
 async function refreshRecommendations() {
     try {
-        const response = await axios.get('/api/member/recommended-events');
+        const response = await axios.get('/web-api/member/recommended-events');
         dashboardData.recommended_events = response.data.recommended_events;
         
         document.getElementById('recommendedCount').textContent = dashboardData.recommended_events.length;
@@ -398,37 +398,3 @@ async function refreshRecommendations() {
         showAlert('Failed to refresh recommendations', 'danger');
     }
 }
-
-async function registerForEvent(eventId) {
-    try {
-        const response = await axios.post(`/api/events/${eventId}/attendees`);
-        showAlert('Successfully registered for the event!', 'success');
-        
-        // Reload dashboard to update registered events
-        loadDashboard();
-    } catch (error) {
-        console.error('Error registering for event:', error);
-        if (error.response && error.response.data.message) {
-            showAlert(error.response.data.message, 'danger');
-        } else {
-            showAlert('Failed to register for event', 'danger');
-        }
-    }
-}
-
-function viewEventDashboard(eventId) {
-    window.location.href = `/attendee/events/${eventId}/dashboard`;
-}
-
-function viewEventDetails(eventId) {
-    window.location.href = `/events/${eventId}`;
-}
-
-function createEvent() {
-    if (confirm('To create events, you need to have an organizer role. Would you like to upgrade your account?')) {
-        window.location.href = '/profile/upgrade-to-organizer';
-    }
-}
-</script>
-@endpush
-

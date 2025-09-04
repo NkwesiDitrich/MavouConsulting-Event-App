@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadProfile() {
     try {
-        const response = await axios.get('/api/profile');
+        const response = await axios.get('/web-api/profile');
         currentUser = response.data.user;
         
         // Populate form fields
@@ -310,80 +310,18 @@ async function updateProfile(e) {
     }
     
     try {
-        const response = await axios.put('/api/profile', formData, {
+        const response = await axios.put('/web-api/profile', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
         });
-        
-        showAlert('Profile updated successfully!', 'success');
-        
-        // Clear password fields
-        document.getElementById('current_password').value = '';
-        document.getElementById('password').value = '';
-        document.getElementById('password_confirmation').value = '';
-        
-        // Reload profile data
-        setTimeout(() => {
-            loadProfile();
-        }, 1000);
-        
+
+        showAlert('Profile updated successfully', 'success');
+        loadProfile();
     } catch (error) {
         console.error('Error updating profile:', error);
-        
-        if (error.response && error.response.data.errors) {
-            const errors = error.response.data.errors;
-            let errorMessage = 'Please fix the following errors:\n';
-            for (let field in errors) {
-                errorMessage += `- ${errors[field][0]}\n`;
-            }
-            showAlert(errorMessage, 'danger');
-        } else if (error.response && error.response.data.message) {
-            showAlert(error.response.data.message, 'danger');
-        } else {
-            showAlert('Failed to update profile. Please try again.', 'danger');
-        }
-    }
-}
-
-function deleteAccount() {
-    const modal = new bootstrap.Modal(document.getElementById('deleteAccountModal'));
-    modal.show();
-}
-
-async function confirmDeleteAccount() {
-    const password = document.getElementById('deletePassword').value;
-    
-    if (!password) {
-        showAlert('Password is required to delete account', 'danger');
-        return;
-    }
-    
-    try {
-        await axios.delete('/api/profile', {
-            data: { password: password }
-        });
-        
-        showAlert('Account deleted successfully. You will be redirected to the home page.', 'success');
-        
-        // Clear local storage and redirect
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user_data');
-        
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 2000);
-        
-    } catch (error) {
-        console.error('Error deleting account:', error);
-        
-        if (error.response && error.response.data.message) {
-            showAlert(error.response.data.message, 'danger');
-        } else {
-            showAlert('Failed to delete account. Please try again.', 'danger');
-        }
+        showAlert('Failed to update profile', 'danger');
     }
 }
 </script>
 @endpush
-

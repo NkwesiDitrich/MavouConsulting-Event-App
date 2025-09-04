@@ -156,3 +156,35 @@ Route::middleware(['auth'])->group(function () {
     })->name('admin.dashboard');
     
 });
+
+// Web API routes (session-based authentication)
+use App\Http\Controllers\Web\MemberController;
+use App\Http\Controllers\Web\EventController;
+use App\Http\Controllers\Web\ProfileController;
+
+// Public event routes (no authentication required)
+Route::prefix('web-api')->group(function () {
+    Route::get('/events', [EventController::class, 'browseEvents']);
+    Route::get('/events/search', [EventController::class, 'searchEvents']);
+    Route::get('/events/{id}', [EventController::class, 'getEventDetails']);
+    Route::get('/events/featured', [EventController::class, 'getFeaturedEvents']);
+    Route::get('/categories', [EventController::class, 'getCategories']);
+});
+
+// Protected web API routes (require web session authentication)
+Route::middleware(['auth'])->prefix('web-api')->group(function () {
+    // Member routes
+    Route::get('/member/dashboard', [MemberController::class, 'dashboard']);
+    Route::put('/member/interests', [MemberController::class, 'updateInterests']);
+    Route::get('/member/recommended-events', [MemberController::class, 'getRecommendedEvents']);
+    
+    // Event registration
+    Route::post('/events/{id}/register', [EventController::class, 'registerForEvent']);
+    
+    // Profile routes
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
+    Route::get('/profile/events', [ProfileController::class, 'myEvents']);
+    Route::delete('/profile', [ProfileController::class, 'destroy']);
+});

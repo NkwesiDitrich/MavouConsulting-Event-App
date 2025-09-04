@@ -163,11 +163,11 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadInitialData() {
     try {
         // Load featured events
-        const featuredResponse = await axios.get('/api/public/events/featured');
+        const featuredResponse = await axios.get('/web-api/events/featured');
         featuredEvents = featuredResponse.data.featured_events;
         loadFeaturedEvents();
         
-        // Load all events with filters
+        // Load all events with filters - automatically load without clear button
         await loadEvents();
         
         // Load filter options
@@ -188,7 +188,7 @@ async function loadEvents(page = 1) {
             ...filters
         });
         
-        const response = await axios.get(`/api/public/events?${params}`);
+        const response = await axios.get(`/web-api/events?${params}`);
         const data = response.data;
         
         if (page === 1) {
@@ -377,213 +377,9 @@ function createEventCard(event, isFeatured = false, isList = false) {
 
 async function loadFilterOptions() {
     try {
-        const response = await axios.get('/api/public/events');
+        const response = await axios.get('/web-api/events');
         const data = response.data;
         
         // Populate category filter
-        const categoryFilter = document.getElementById('categoryFilter');
-        data.filters.categories.forEach(category => {
-            const option = document.createElement('option');
-            option.value = category.id;
-            option.textContent = category.name;
-            categoryFilter.appendChild(option);
-        });
-        
-        // Populate location filter
-        const locationFilter = document.getElementById('locationFilter');
-        data.filters.locations.forEach(location => {
-            if (location) {
-                const option = document.createElement('option');
-                option.value = location;
-                option.textContent = location;
-                locationFilter.appendChild(option);
-            }
-        });
-        
-    } catch (error) {
-        console.error('Error loading filter options:', error);
-    }
-}
-
-function applyFilters() {
-    filters = {};
-    
-    const category = document.getElementById('categoryFilter').value;
-    const location = document.getElementById('locationFilter').value;
-    const dateFrom = document.getElementById('dateFromFilter').value;
-    const dateTo = document.getElementById('dateToFilter').value;
-    
-    if (category) filters.category = category;
-    if (location) filters.location = location;
-    if (dateFrom) filters.date_from = dateFrom;
-    if (dateTo) filters.date_to = dateTo;
-    
-    currentPage = 1;
-    loadEvents(1);
-}
-
-function clearFilters() {
-    document.getElementById('categoryFilter').value = '';
-    document.getElementById('locationFilter').value = '';
-    document.getElementById('dateFromFilter').value = '';
-    document.getElementById('dateToFilter').value = '';
-    
-    filters = {};
-    currentPage = 1;
-    loadEvents(1);
-}
-
-async function searchEvents() {
-    const searchTerm = document.getElementById('searchInput').value.trim();
-    
-    if (!searchTerm) {
-        applyFilters();
-        return;
-    }
-    
-    try {
-        showLoading();
-        
-        const response = await axios.get(`/api/public/events/search?q=${encodeURIComponent(searchTerm)}`);
-        allEvents = response.data.events;
-        
-        displayEvents();
-        updateEventCount();
-        
-        // Hide load more button for search results
-        document.getElementById('loadMoreBtn').style.display = 'none';
-        
-    } catch (error) {
-        console.error('Error searching events:', error);
-        showAlert('Failed to search events', 'danger');
-    } finally {
-        hideLoading();
-    }
-}
-
-function loadMoreEvents() {
-    loadEvents(currentPage + 1);
-}
-
-function changeView(view) {
-    currentView = view;
-    
-    // Update active button
-    document.querySelectorAll('.btn-group .btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
-    
-    displayEvents();
-}
-
-function updateEventCount() {
-    document.getElementById('eventCount').textContent = allEvents.length;
-}
-
-async function viewEventDetails(eventId) {
-    try {
-        const response = await axios.get(`/api/public/events/${eventId}`);
-        const event = response.data.event;
-        const stats = response.data.stats;
-        
-        document.getElementById('eventModalTitle').textContent = event.name;
-        
-        document.getElementById('eventModalBody').innerHTML = `
-            <div class="row">
-                <div class="col-md-6">
-                    <img src="${event.image_url || '/images/default-event.jpg'}" class="img-fluid rounded mb-3" alt="${event.name}">
-                </div>
-                <div class="col-md-6">
-                    <h5>${event.name}</h5>
-                    <p class="text-muted">${event.description || 'No description available'}</p>
-                    
-                    <div class="mb-2">
-                        <strong>Date:</strong> ${formatDate(event.start_time)}
-                    </div>
-                    <div class="mb-2">
-                        <strong>Location:</strong> ${event.location || 'Online'}
-                    </div>
-                    <div class="mb-2">
-                        <strong>Organizer:</strong> ${event.organizer?.name || 'Unknown'}
-                    </div>
-                    <div class="mb-2">
-                        <strong>Category:</strong> ${event.category?.name || 'General'}
-                    </div>
-                    <div class="mb-2">
-                        <strong>Attendees:</strong> ${stats.attendee_count}
-                    </div>
-                    <div class="mb-2">
-                        <strong>Price:</strong> ${event.is_free ? 'Free' : `$${event.ticket_price}`}
-                    </div>
-                    
-                    ${stats.is_full ? '<div class="alert alert-warning">This event is full</div>' : ''}
-                    ${!stats.registration_open ? '<div class="alert alert-danger">Registration is closed</div>' : ''}
-                </div>
-            </div>
-        `;
-        
-        const isUpcoming = new Date(event.start_time) > new Date();
-        const canRegister = isUpcoming && stats.registration_open && !stats.is_full;
-        
-        document.getElementById('eventModalFooter').innerHTML = `
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            ${canRegister ? `<button type="button" class="btn btn-primary" onclick="registerForEvent(${event.id})">
-                <i class="fas fa-calendar-plus me-2"></i>
-                Register for Event
-            </button>` : ''}
-        `;
-        
-        const modal = new bootstrap.Modal(document.getElementById('eventModal'));
-        modal.show();
-        
-    } catch (error) {
-        console.error('Error loading event details:', error);
-        showAlert('Failed to load event details', 'danger');
-    }
-}
-
-async function registerForEvent(eventId) {
-    // Check if user is logged in
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-        showAlert('Please login to register for events', 'warning');
-        setTimeout(() => {
-            window.location.href = '/login';
-        }, 1500);
-        return;
-    }
-    
-    try {
-        const response = await axios.post(`/api/events/${eventId}/attendees`);
-        showAlert('Successfully registered for the event!', 'success');
-        
-        // Close modal if open
-        const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        // Refresh the event data
-        loadEvents(1);
-        
-    } catch (error) {
-        console.error('Error registering for event:', error);
-        if (error.response && error.response.data.message) {
-            showAlert(error.response.data.message, 'danger');
-        } else {
-            showAlert('Failed to register for event', 'danger');
-        }
-    }
-}
-
-function showLoading() {
-    document.getElementById('loadingSpinner').classList.remove('d-none');
-}
-
-function hideLoading() {
-    document.getElementById('loadingSpinner').classList.add('d-none');
-}
-</script>
-@endpush
-
+        const ca
+(Content truncated due to size limit. Use page ranges or line ranges to read remaining content)

@@ -240,20 +240,10 @@
     
     <!-- Custom JavaScript -->
     <script>
-        // Set up Axios defaults
+        // Set up Axios defaults for CSRF protection
         axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
         axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         
-        // Set auth token if user is logged in
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            
-            // Hide login/register links and show user menu
-            const guestLinks = document.querySelectorAll('.navbar-nav .nav-item:has(a[href*="login"]), .navbar-nav .nav-item:has(a[href*="register"])');
-            guestLinks.forEach(link => link.style.display = 'none');
-        }
-
         // Global functions
         function showLoading(element) {
             element.classList.add('loading', 'show');
@@ -296,4 +286,3 @@
     @stack('scripts')
 </body>
 </html>
-

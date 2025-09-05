@@ -4,9 +4,6 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * Event Registrations Migration - 100% Error-Free with Full IntelliSense Support
- */
 return new class extends Migration
 {
     /**
@@ -16,23 +13,24 @@ return new class extends Migration
     {
         Schema::create('event_registrations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->foreignId('event_id')->constrained('events')->onDelete('cascade');
-            $table->enum('status', ['registered', 'cancelled', 'attended', 'no_show'])->default('registered');
-            $table->datetime('registered_at');
-            $table->datetime('cancelled_at')->nullable();
-            $table->string('cancellation_reason')->nullable();
-            $table->json('additional_info')->nullable(); // Store as JSON
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->enum('status', ['registered', 'cancelled', 'waitlisted'])->default('registered');
+            $table->json('registration_data')->nullable(); // Custom form responses
+            $table->string('ticket_type')->nullable(); // General, VIP, etc.
+            $table->decimal('amount_paid', 10, 2)->default(0);
+            $table->string('payment_status')->default('pending');
+            $table->timestamp('registered_at');
+            $table->timestamp('cancelled_at')->nullable();
             $table->timestamps();
 
             // Unique constraint to prevent duplicate registrations
-            $table->unique(['user_id', 'event_id']);
-
-            // Indexes for better performance
+            $table->unique(['event_id', 'user_id']);
+            
+            // Indexes for performance
             $table->index(['event_id', 'status']);
-            $table->index(['user_id', 'status']);
+            $table->index('user_id');
             $table->index('registered_at');
-            $table->index('status');
         });
     }
 

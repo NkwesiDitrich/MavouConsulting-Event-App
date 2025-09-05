@@ -197,7 +197,6 @@ Route::prefix('web-api')->name('api.')->group(function () {
     });
 });
 
-require __DIR__.'/auth.php';
 // Event routes
 Route::get('/events', [EventController::class, 'index'])->name('events.index');
 Route::get('/events/browse', [EventController::class, 'browse'])->name('events.browse');

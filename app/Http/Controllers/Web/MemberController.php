@@ -3,28 +3,15 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\Event;
-use App\Models\Attendee;
 use App\Models\EventRegistration;
-use App\Models\Category;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\Hash;
 
-/**
- * MemberController - 100% Error-Free with Full IntelliSense Support
- * 
- * This controller handles all member-related operations with proper
- * type hints, documentation, and error handling for IntelliSense.
- */
 class MemberController extends Controller
 {
     public function __construct()
@@ -32,152 +19,164 @@ class MemberController extends Controller
         $this->middleware('auth');
     }
 
-    /**
-     * Display the member dashboard with real-time database tracking
-     * 
-     * @return JsonResponse
-     */
-    public function dashboard(): JsonResponse
+    public function dashboard()
     {
-        try {
-            /** @var User $user */
-            $user = Auth::user();
-            
-            // Get REAL-TIME user's registered events (upcoming only) - FIXED QUERY
-            $registeredEvents = Event::whereHas('attendees', function($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
-            ->where('start_time', '>', Carbon::now())
-            ->with(['category', 'organizer'])
-            ->orderBy('start_time', 'asc')
+        $user = Auth::user();
+        
+        // Get user's registered events
+        $registeredEvents = EventRegistration::with(['event.category', 'event.organizer'])
+            ->where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
             ->get();
 
-            // Get REAL-TIME user statistics - FIXED QUERIES
-            $totalEventsAttended = DB::table('attendees')
-                ->where('user_id', $user->id)
-                ->count();
-                
-            $eventsOrganized = DB::table('events')
-                ->where('organizer_id', $user->id)
-                ->count();
+        // Get upcoming events the user might be interested in
+        $upcomingEvents = Event::with(['category', 'organizer'])
+            ->where('start_time', '>', now())
+            ->where('status', 'published')
+            ->whereNotIn('id', $registeredEvents->pluck('event_id'))
+            ->orderBy('start_time', 'asc')
+            ->limit(6)
+            ->get();
 
-            $stats = [
-                'total_events_attended' => $totalEventsAttended,
-                'upcoming_registrations' => $registeredEvents->count(),
-                'events_organized' => $eventsOrganized,
-            ];
+        // Get user's event statistics
+        $stats = [
+            'total_registered' => $registeredEvents->count(),
+            'upcoming_events' => $registeredEvents->filter(function($registration) {
+                return $registration->event && $registration->event->start_time > now();
+            })->count(),
+            'past_events' => $registeredEvents->filter(function($registration) {
+                return $registration->event && $registration->event->start_time <= now();
+            })->count(),
+        ];
 
-            // Get recommended events based on user interests - REAL-TIME
-            $recommendedEvents = $this->getRecommendedEvents($user);
+        return view('member.dashboard', compact('registeredEvents', 'upcomingEvents', 'stats'));
+    }
 
-            // Get user with fresh data from database
-            $freshUser = DB::table('users')->where('id', $user->id)->first();
-            $userInterests = $freshUser->interests ? json_decode($freshUser->interests, true) : [];
+    public function profile()
+    {
+        $user = Auth::user();
+        return view('member.profile', compact('user'));
+    }
 
-            // Add profile picture URL
-            $user->profile_picture = $user->profile_picture 
-                ? asset('storage/' . $user->profile_picture) 
-                : asset('images/default-avatar.png');
-            
-            // Add interests to user object
-            $user->interests = $userInterests;
+    public function updateProfile(Request $request)
+    {
+        $user = Auth::user();
+        
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string|max:20',
+            'bio' => 'nullable|string|max:1000',
+            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'current_password' => 'nullable|required_with:new_password',
+            'new_password' => 'nullable|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Verify current password if changing password
+            if ($request->filled('current_password')) {
+                if (!Hash::check($request->current_password, $user->password)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Current password is incorrect'
+                    ], 422);
+                }
+            }
+
+            // Handle profile picture upload
+            if ($request->hasFile('profile_picture')) {
+                // Delete old profile picture if exists
+                if ($user->profile_picture && Storage::disk('public')->exists($user->profile_picture)) {
+                    Storage::disk('public')->delete($user->profile_picture);
+                }
+
+                // Store new profile picture
+                $path = $request->file('profile_picture')->store('profile-pictures', 'public');
+                $user->profile_picture = $path;
+            }
+
+            // Update user data
+            $user->name = $request->name;
+            $user->email = $request->email;
+            $user->phone = $request->phone;
+            $user->bio = $request->bio;
+
+            // Update password if provided
+            if ($request->filled('new_password')) {
+                $user->password = Hash::make($request->new_password);
+            }
+
+            $user->save();
 
             return response()->json([
                 'success' => true,
-                'user' => $user,
-                'registered_events' => $registeredEvents,
-                'recommended_events' => $recommendedEvents,
-                'stats' => $stats
+                'message' => 'Profile updated successfully',
+                'user' => [
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'bio' => $user->bio,
+                    'profile_picture_url' => $user->profile_picture ? Storage::url($user->profile_picture) : null
+                ]
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Dashboard loading error: ' . $e->getMessage(), [
-                'user_id' => Auth::id(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to load dashboard data'
+                'message' => 'Failed to update profile: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    /**
-     * Get recommended events for user based on interests - REAL-TIME
-     * 
-     * @param User $user
-     * @return \Illuminate\Database\Eloquent\Collection
-     */
-    private function getRecommendedEvents(User $user): \Illuminate\Database\Eloquent\Collection
+    public function myEvents()
     {
-        try {
-            // Get fresh user interests from database
-            $freshUser = DB::table('users')->where('id', $user->id)->first();
-            $userInterests = $freshUser->interests ? json_decode($freshUser->interests, true) : [];
-            
-            if (empty($userInterests)) {
-                // If no interests, return popular upcoming events (not registered by user)
-                return Event::where('start_time', '>', Carbon::now())
-                    ->whereNotExists(function($query) use ($user) {
-                        $query->select(DB::raw(1))
-                              ->from('attendees')
-                              ->whereRaw('attendees.event_id = events.id')
-                              ->where('attendees.user_id', $user->id);
-                    })
-                    ->with(['category', 'organizer'])
-                    ->orderBy('created_at', 'desc')
-                    ->limit(5)
-                    ->get();
-            }
+        $user = Auth::user();
+        
+        $registeredEvents = EventRegistration::with(['event.category', 'event.organizer'])
+            ->where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->paginate(12);
 
-            // Get events matching user interests (not registered by user)
-            return Event::where('start_time', '>', Carbon::now())
-                ->whereHas('category', function($query) use ($userInterests) {
-                    $query->whereIn('name', $userInterests);
-                })
-                ->whereNotExists(function($query) use ($user) {
-                    $query->select(DB::raw(1))
-                          ->from('attendees')
-                          ->whereRaw('attendees.event_id = events.id')
-                          ->where('attendees.user_id', $user->id);
-                })
-                ->with(['category', 'organizer'])
-                ->orderBy('start_time', 'asc')
-                ->limit(5)
-                ->get();
-
-        } catch (\Exception $e) {
-            Log::error('Error getting recommended events: ' . $e->getMessage());
-            return collect();
-        }
+        return view('member.my-events', compact('registeredEvents'));
     }
 
-    /**
-     * Get event details for modal popup
-     * 
-     * @param int $eventId
-     * @return JsonResponse
-     */
-    public function getEventDetails(int $eventId): JsonResponse
+    // NEW METHOD: Get event details for member dashboard
+    public function getEventDetails($eventId)
     {
         try {
-            /** @var User $user */
             $user = Auth::user();
             
-            $event = Event::with(['category', 'organizer'])
+            $event = Event::with(['category', 'organizer', 'registrations'])
                 ->findOrFail($eventId);
-            
+
             // Check if user is registered for this event
-            $isRegistered = DB::table('attendees')
-                ->where('user_id', $user->id)
+            $isRegistered = EventRegistration::where('user_id', $user->id)
                 ->where('event_id', $eventId)
                 ->exists();
-            
-            // Get attendee count
-            $attendeeCount = DB::table('attendees')
-                ->where('event_id', $eventId)
-                ->count();
+
+            // Get registration details if registered
+            $registration = null;
+            if ($isRegistered) {
+                $registration = EventRegistration::where('user_id', $user->id)
+                    ->where('event_id', $eventId)
+                    ->first();
+            }
+
+            // Calculate attendee count
+            $attendeeCount = $event->registrations()->count();
+
+            // Check if registration is still open
+            $registrationOpen = $event->start_time > now() && 
+                               $event->status === 'published' &&
+                               (!$event->max_attendees || $attendeeCount < $event->max_attendees);
 
             return response()->json([
                 'success' => true,
@@ -185,147 +184,123 @@ class MemberController extends Controller
                     'id' => $event->id,
                     'name' => $event->name,
                     'description' => $event->description,
-                    'slogan' => $event->slogan,
+                    'start_time' => $event->start_time,
+                    'end_time' => $event->end_time,
                     'location' => $event->location,
-                    'category' => $event->category ? $event->category->name : 'General',
-                    'event_type' => $event->event_type,
-                    'audience' => $event->audience,
-                    'start_time' => $event->start_time->format('Y-m-d H:i:s'),
-                    'end_time' => $event->end_time->format('Y-m-d H:i:s'),
-                    'organizer_id' => $event->organizer_id,
-                    'organizer_name' => $event->organizer ? $event->organizer->name : 'Unknown',
-                    'image_url' => $event->image_url ?: asset('images/default-event.jpg'),
+                    'is_free' => $event->is_free,
+                    'ticket_price' => $event->ticket_price,
+                    'max_attendees' => $event->max_attendees,
+                    'status' => $event->status,
+                    'image_url' => $event->image_url,
+                    'category' => $event->category ? [
+                        'id' => $event->category->id,
+                        'name' => $event->category->name
+                    ] : null,
+                    'organizer' => [
+                        'id' => $event->organizer->id,
+                        'name' => $event->organizer->name,
+                        'email' => $event->organizer->email
+                    ]
+                ],
+                'stats' => [
                     'attendee_count' => $attendeeCount,
+                    'registration_open' => $registrationOpen,
                     'is_registered' => $isRegistered,
-                    'is_organizer' => $event->organizer_id === $user->id
-                ]
+                    'registration_date' => $registration ? $registration->created_at : null
+                ],
+                'registration' => $registration ? [
+                    'id' => $registration->id,
+                    'status' => $registration->status,
+                    'registered_at' => $registration->created_at
+                ] : null
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error getting event details: ' . $e->getMessage(), [
-                'event_id' => $eventId,
-                'user_id' => Auth::id()
-            ]);
-
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to load event details'
-            ], 500);
+                'message' => 'Event not found or access denied'
+            ], 404);
         }
     }
 
-    /**
-     * Register user for an event using EventRegistration model
-     * 
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function registerForEvent(Request $request): JsonResponse
+    // Register for an event
+    public function registerForEvent(Request $request, $eventId)
     {
         try {
-            $validator = Validator::make($request->all(), [
-                'event_id' => 'required|integer|exists:events,id'
-            ]);
+            $user = Auth::user();
+            
+            $event = Event::findOrFail($eventId);
 
-            if ($validator->fails()) {
+            // Check if event is still open for registration
+            if ($event->start_time <= now()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid event ID',
-                    'errors' => $validator->errors()
-                ], 422);
+                    'message' => 'Registration is closed for this event'
+                ], 400);
             }
 
-            /** @var User $user */
-            $user = Auth::user();
-            $eventId = (int) $request->event_id;
+            if ($event->status !== 'published') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This event is not available for registration'
+                ], 400);
+            }
 
-            // Check if already registered
+            // Check if user is already registered
             $existingRegistration = EventRegistration::where('user_id', $user->id)
                 ->where('event_id', $eventId)
                 ->first();
 
-            if ($existingRegistration && $existingRegistration->isActive()) {
+            if ($existingRegistration) {
                 return response()->json([
                     'success' => false,
                     'message' => 'You are already registered for this event'
-                ], 409);
-            }
-
-            // Get event details
-            $event = Event::findOrFail($eventId);
-
-            // Check if event is in the future
-            if ($event->start_time <= Carbon::now()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot register for past events'
                 ], 400);
             }
 
-            // Create new registration using EventRegistration model
-            $registration = new EventRegistration();
-            $registration->user_id = $user->id;
-            $registration->event_id = $eventId;
-            $registration->status = 'registered';
-            $registration->registered_at = now();
-            
-            // Save the registration - this will work with IntelliSense
-            if ($registration->save()) {
-                Log::info('User registered for event', [
-                    'user_id' => $user->id,
-                    'event_id' => $eventId,
-                    'registration_id' => $registration->id
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Successfully registered for the event!',
-                    'registration_id' => $registration->id
-                ]);
-            } else {
-                throw new \Exception('Failed to save registration');
+            // Check if event has reached max capacity
+            if ($event->max_attendees) {
+                $currentAttendees = EventRegistration::where('event_id', $eventId)->count();
+                if ($currentAttendees >= $event->max_attendees) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This event has reached maximum capacity'
+                    ], 400);
+                }
             }
 
-        } catch (\Exception $e) {
-            Log::error('Error registering for event: ' . $e->getMessage(), [
-                'user_id' => Auth::id(),
-                'event_id' => $request->event_id ?? null,
-                'trace' => $e->getTraceAsString()
+            // Create registration
+            $registration = EventRegistration::create([
+                'user_id' => $user->id,
+                'event_id' => $eventId,
+                'status' => 'confirmed',
+                'registered_at' => now()
             ]);
 
             return response()->json([
+                'success' => true,
+                'message' => 'Successfully registered for the event!',
+                'registration' => [
+                    'id' => $registration->id,
+                    'status' => $registration->status,
+                    'registered_at' => $registration->created_at
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
                 'success' => false,
-                'message' => 'Failed to register for event'
+                'message' => 'Failed to register for event: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    /**
-     * Cancel event registration using EventRegistration model
-     * 
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function cancelRegistration(Request $request): JsonResponse
+    // Cancel event registration
+    public function cancelRegistration($eventId)
     {
         try {
-            $validator = Validator::make($request->all(), [
-                'event_id' => 'required|integer|exists:events,id'
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid event ID',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            /** @var User $user */
             $user = Auth::user();
-            $eventId = (int) $request->event_id;
-
-            // Find the registration
+            
             $registration = EventRegistration::where('user_id', $user->id)
                 ->where('event_id', $eventId)
                 ->first();
@@ -337,268 +312,27 @@ class MemberController extends Controller
                 ], 404);
             }
 
-            if (!$registration->isActive()) {
+            $event = Event::findOrFail($eventId);
+
+            // Check if cancellation is allowed (e.g., not too close to event start)
+            if ($event->start_time <= now()->addHours(24)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Registration is already cancelled'
+                    'message' => 'Cannot cancel registration less than 24 hours before the event'
                 ], 400);
             }
 
-            // Cancel the registration using the model method
-            if ($registration->cancel()) {
-                Log::info('User cancelled event registration', [
-                    'user_id' => $user->id,
-                    'event_id' => $eventId,
-                    'registration_id' => $registration->id
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registration cancelled successfully!'
-                ]);
-            } else {
-                throw new \Exception('Failed to cancel registration');
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Error cancelling registration: ' . $e->getMessage(), [
-                'user_id' => Auth::id(),
-                'event_id' => $request->event_id ?? null,
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to cancel registration'
-            ], 500);
-        }
-    }
-
-    /**
-     * Update user profile with file upload support
-     * 
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function updateProfile(Request $request): JsonResponse
-    {
-        try {
-            /** @var User $user */
-            $user = Auth::user();
-
-            $validator = Validator::make($request->all(), [
-                'name' => 'required|string|max:255',
-                'email' => 'required|email|max:255|unique:users,email,' . $user->id,
-                'phone' => 'nullable|string|max:20',
-                'bio' => 'nullable|string|max:1000',
-                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-                'current_password' => 'nullable|string|min:8',
-                'new_password' => 'nullable|string|min:8|confirmed',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            // Handle profile picture upload
-            if ($request->hasFile('profile_picture')) {
-                // Delete old profile picture if exists
-                if ($user->profile_picture && Storage::disk('public')->exists($user->profile_picture)) {
-                    Storage::disk('public')->delete($user->profile_picture);
-                }
-
-                // Store new profile picture
-                $profilePicturePath = $request->file('profile_picture')->store('profile-pictures', 'public');
-                $user->profile_picture = $profilePicturePath;
-            }
-
-            // Update basic profile information
-            $user->name = $request->name;
-            $user->email = $request->email;
-            $user->phone = $request->phone;
-            $user->bio = $request->bio;
-
-            // Handle password change
-            if (!Hash::check($request->current_password, $user->password)) {
-                  return response()->json([
-                  'success' => false,
-                  'message' => 'Current password is incorrect'
-                    ], 400);
-            }
-          $user->password = Hash::make($request->new_password);
-
-            // Save the user - this will work with IntelliSense
-            if ($user->save()) {
-                Log::info('User profile updated', [
-                    'user_id' => $user->id,
-                    'updated_fields' => array_keys($request->only(['name', 'email', 'phone', 'bio']))
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Profile updated successfully!',
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone,
-                        'bio' => $user->bio,
-                        'profile_picture' => $user->profile_picture 
-                            ? asset('storage/' . $user->profile_picture) 
-                            : asset('images/default-avatar.png')
-                    ]
-                ]);
-            } else {
-                throw new \Exception('Failed to save user profile');
-            }
-
-        } catch (ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-        } catch (\Exception $e) {
-            Log::error('Error updating profile: ' . $e->getMessage(), [
-                'user_id' => Auth::id(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update profile'
-            ], 500);
-        }
-    }
-
-    /**
-     * Update user interests - FIXED to handle all cases
-     * 
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function updateInterests(Request $request): JsonResponse
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'interests' => 'array', // Allow empty array
-                'interests.*' => 'string|max:50'
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            /** @var User $user */
-            $user = Auth::user();
-            
-            // Handle empty interests array (user unchecked all)
-            $interests = $request->interests ?? [];
-            
-            // Update interests using DB query to avoid IntelliSense issues
-            $updated = DB::table('users')
-                ->where('id', $user->id)
-                ->update([
-                    'interests' => json_encode($interests),
-                    'updated_at' => now()
-                ]);
-
-            if (!$updated) {
-                throw new \Exception('Failed to update interests in database');
-            }
-
-            Log::info('User interests updated', [
-                'user_id' => $user->id,
-                'interests' => $interests,
-                'interests_count' => count($interests)
-            ]);
+            $registration->delete();
 
             return response()->json([
                 'success' => true,
-                'message' => count($interests) > 0 
-                    ? 'Interests updated successfully!' 
-                    : 'All interests cleared successfully!',
-                'interests' => $interests
-            ]);
-
-        } catch (ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-        } catch (\Exception $e) {
-            Log::error('Error updating interests: ' . $e->getMessage(), [
-                'user_id' => Auth::id(),
-                'request_data' => $request->all()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update interests'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get member profile data - REAL-TIME
-     * 
-     * @return JsonResponse
-     */
-    public function profile(): JsonResponse
-    {
-        try {
-            /** @var User $user */
-            $user = Auth::user();
-            
-            // Get fresh user data from database
-            $freshUser = DB::table('users')->where('id', $user->id)->first();
-            
-            // Add profile picture URL
-            $user->profile_picture = $user->profile_picture 
-                ? asset('storage/' . $user->profile_picture) 
-                : asset('images/default-avatar.png');
-
-            // Get user's organized events - REAL-TIME
-            $organizedEvents = Event::where('organizer_id', $user->id)
-                ->with('category')
-                ->orderBy('start_time', 'desc')
-                ->get();
-
-            // Get user's attended events - REAL-TIME
-            $attendedEvents = Event::whereExists(function($query) use ($user) {
-                $query->select(DB::raw(1))
-                      ->from('attendees')
-                      ->whereRaw('attendees.event_id = events.id')
-                      ->where('attendees.user_id', $user->id);
-            })
-            ->with(['category', 'organizer'])
-            ->orderBy('start_time', 'desc')
-            ->get();
-
-            return response()->json([
-                'success' => true,
-                'user' => $user,
-                'organized_events' => $organizedEvents,
-                'attended_events' => $attendedEvents
+                'message' => 'Registration cancelled successfully'
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error loading profile: ' . $e->getMessage(), [
-                'user_id' => Auth::id()
-            ]);
-
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to load profile data'
+                'message' => 'Failed to cancel registration: ' . $e->getMessage()
             ], 500);
         }
     }
